@@ -5,14 +5,27 @@
   "description": "Agent 画布 —— 可视化 AI 工作流创作平台（client + server 双包 monorepo）",
   "scripts": {
     "dev": "concurrently -n CLIENT,SERVER -c cyan,green \"npm --prefix client run dev\" \"npm --prefix server run dev\"",
+    "dev:desktop": "concurrently -n CLIENT,SERVER,ELECTRON -c cyan,green,yellow \"npm --prefix client run dev\" \"npm --prefix server run dev\" \"wait-on tcp:127.0.0.1:3001 tcp:127.0.0.1:5173 && electron electron/main.cjs\"",
     "install:all": "npm install && npm --prefix client install && npm --prefix server install",
     "lint": "npm --prefix client run lint",
     "build:client": "npm --prefix client run build",
     "build:server": "npm --prefix server run build",
+    "bundle:server": "esbuild server/src/index.ts --bundle --platform=node --format=cjs --packages=external --outfile=release/app/server/server.cjs --log-level=warning",
+    "stage:server": "node -e \"require('fs').copyFileSync('server/package.json','release/app/server/package.json')\" && npm --prefix release/app/server install --omit=dev --no-audit --no-fund",
+    "electron:build": "npm --prefix client run build:rel && npm run bundle:server && npm run stage:server && electron-builder --win --publish never",
     "typecheck": "npm --prefix client run typecheck && npm --prefix server run typecheck"
   },
+  "main": "electron/main.cjs",
   "devDependencies": {
     "concurrently": "^9.1.0",
-    "prettier": "^3.3.3"
+    "electron": "^33.0.0",
+    "electron-builder": "^25.1.8",
+    "esbuild": "^0.24.2",
+    "prettier": "^3.3.3",
+    "wait-on": "^8.0.1"
+  },
+  "allowScripts": {
+    "electron@33.4.11": true,
+    "esbuild@0.24.2": true
   }
 }

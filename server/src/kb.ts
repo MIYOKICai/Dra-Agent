@@ -12,9 +12,9 @@
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { fileURLToPath } from 'node:url';
 import type { KBFragment, KBInfo, KBInfoEx, KBQAMessage, KBSearchResult } from '../../shared/types';
 import { appConfig } from './config';
+import { serverRoot } from './paths';
 import { listAdapters, type ProviderAdapter } from './providers';
 
 /* =============== 错误类型 =============== */
@@ -60,8 +60,6 @@ interface KBDocRecord {
 }
 
 /* =============== 路径与原子写 =============== */
-
-const serverRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 
 /** 校验 id 形态（uuid），同时阻断路径穿越 */
 const ID_RE = /^[0-9a-fA-F-]{8,64}$/;

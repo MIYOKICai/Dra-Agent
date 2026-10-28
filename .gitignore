@@ -5,6 +5,9 @@ node_modules/
 dist/
 build/
 
+# 桌面版打包（release/app 打包暂存区；最终 exe 输出在项目外 Temp 目录）
+release/
+
 # 环境变量（含密钥，禁止提交）
 .env
 .env.local

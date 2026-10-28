@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "build:rel": "vite build --outDir ../release/app/client-dist --emptyOutDir",
     "lint": "eslint .",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit"

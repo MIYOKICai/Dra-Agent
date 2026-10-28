@@ -95,6 +95,24 @@ npm run dev
 
 > **无密钥体验**：不配置任何 API Key 时可使用内置 **Mock 演示服务商**，走通「编排 → 运行 → 分支 → 输出」与「对话 → 工具 → 确认 → 回答」全链路。
 
+## 打包桌面版（Windows exe）
+
+基于 Electron：主进程拉起内置 Node server（`ELECTRON_RUN_AS_NODE`），server 同端口同源静态托管前端产物，数据目录（知识库 / 上传 / 设置 / 用户画像）重定向到 `%APPDATA%/Dra-Agent/data`。
+
+```bash
+# 一键打包（构建前端 → esbuild 打包 server → 安装生产依赖 → electron-builder）
+npm run electron:build
+```
+
+产物（安装包 + 免安装绿色版）：
+
+- `Dra-Agent-<version>-Setup.exe`：NSIS 安装包，可选安装目录、自动创建桌面快捷方式
+- `Dra-Agent-<version>-Portable.exe`：单文件便携版，双击即用
+
+开发调试桌面壳：`npm run dev:desktop`（在 `npm run dev` 基础上并行启动 Electron 窗口加载 Vite dev server）。
+
+> 说明：server 启动时若默认端口被占会自动换下一个端口并把实际端口回传主进程，无需手工配置；打包输出目录默认在系统 Temp（`C:/Users/.../Temp/dra-release`），以规避部分 IDE 文件监视器对构建产物的句柄锁定。
+
 ## 模型服务商配置
 
 两种方式（可混用，设置页为运行时可写覆盖层）：

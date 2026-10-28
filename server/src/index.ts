@@ -1,5 +1,7 @@
 import express from 'express';
 import cors from 'cors';
+import { existsSync, writeFileSync } from 'node:fs';
+import path from 'node:path';
 import { PORT, providers, isProviderAvailable } from './config';
 import { chatRouter } from './routes/chat';
 import { embeddingsRouter } from './routes/embeddings';
@@ -82,10 +84,60 @@ app.get('/api/health', (_req, res) => {
   });
 });
 
-app.listen(PORT, () => {
-  console.log(`[dra-agent-server] listening at http://localhost:${PORT}`);
-  const status = Object.keys(providers)
-    .map((id) => `${id}:${isProviderAvailable(id) ? 'ok' : 'missing-key'}`)
-    .join(' ');
-  console.log(`[dra-agent-server] providers -> ${status}`);
-});
+/**
+ * 静态托管前端构建产物（桌面版 / 纯 Node 部署用）：
+ * 设置 CLIENT_DIST_DIR 后，同一端口同源承载页面与 /api（免 CORS、免 Vite 代理）。
+ * 放在所有 /api 路由之后注册，API 优先命中。
+ */
+const clientDist = process.env.CLIENT_DIST_DIR;
+if (clientDist && existsSync(path.join(clientDist, 'index.html'))) {
+  app.use(express.static(clientDist));
+  // SPA 回退：非 GET 与 /api 一律放行，其余路径回退 index.html（BrowserRouter 深链接）
+  app.use((req, res, next) => {
+    if (req.method !== 'GET' || req.path.startsWith('/api/')) {
+      next();
+      return;
+    }
+    res.sendFile(path.join(clientDist, 'index.html'));
+  });
+  console.log(`[dra-agent-server] serving client dist at ${clientDist}`);
+}
+
+/**
+ * 启动 HTTP 监听：端口被占（EADDRINUSE）时自动向上重试最多 10 个。
+ * Windows 上 bind 探测可能因 SO_REUSEADDR 误判端口空闲，服务端自愈才是根治。
+ */
+function listenWithRetry(basePort: number): void {
+  let attempt = 0;
+  const tryListen = (): void => {
+    const server = app.listen(basePort + attempt, () => {
+      const port = basePort + attempt;
+      // 桌面版：把最终端口写给主进程（监听端口可能与传入 PORT 不同——被占自愈时）
+      if (process.env.PORT_FILE) {
+        try {
+          writeFileSync(process.env.PORT_FILE, String(port));
+        } catch {
+          // 主进程读不到文件时会走健康检查兜底
+        }
+      }
+      console.log(`[dra-agent-server] listening at http://localhost:${port}`);
+      const status = Object.keys(providers)
+        .map((id) => `${id}:${isProviderAvailable(id) ? 'ok' : 'missing-key'}`)
+        .join(' ');
+      console.log(`[dra-agent-server] providers -> ${status}`);
+    });
+    server.on('error', (err: NodeJS.ErrnoException) => {
+      if (err.code === 'EADDRINUSE' && attempt < 10) {
+        console.warn(`[dra-agent-server] port ${basePort + attempt} in use, trying next…`);
+        attempt += 1;
+        tryListen();
+        return;
+      }
+      console.error(`[dra-agent-server] listen failed: ${err.message}`);
+      process.exit(1);
+    });
+  };
+  tryListen();
+}
+
+listenWithRetry(PORT);

@@ -1,0 +1,38 @@
+# electron-builder 配置（Windows 优先）
+# 应用壳（electron/main.cjs）打进 asar；server 单文件 bundle 与前端产物
+# 经 extraResources 以「不打包」形式置于 resources/app，避免 asar 路径与只读目录问题
+appId: com.miyokigames.draagent
+productName: Dra-Agent
+directories:
+  # 输出放在工作区外：D:\Dra-Agent 受 IDE/沙箱文件过滤器监视，
+  # 构建产物（app.asar 等）会被持有句柄导致 EBUSY，无法清理重跑
+  output: C:/Users/MECHREVO/AppData/Local/Temp/dra-release
+  buildResources: build
+files:
+  - electron/main.cjs
+  - package.json
+extraResources:
+  - from: release/app
+    to: app
+# 应用壳（electron/main.cjs）与 server 单文件、前端产物均以「不打包」形式置于
+# resources：asar 在本机构建环境会触发与并行解包的文件锁冲突（app.asar being used），
+# 关闭 asar 后功能等价（应用代码本就是公开的，无隐藏需求）
+asar: false
+# 直接复用 node_modules 内已解压的 Electron dist（跳过 zip 下载与解包——
+# 本机 app-builder 的并行解包会与 asar 产物发生文件锁冲突）
+electronDist: node_modules/electron/dist
+win:
+  target:
+    - nsis
+    - portable
+  artifactName: ${productName}-${version}-Setup.${ext}
+  # 不签名、不改写 exe 资源：避免拉取 winCodeSign（其内含 macOS 符号链接，
+  # 普通权限 Windows 解压失败）。图标 / 版本信息可后续在启用开发者模式后恢复
+  signAndEditExecutable: false
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: always
+  shortcutName: Dra-Agent
+portable:
+  artifactName: ${productName}-${version}-Portable.${ext}

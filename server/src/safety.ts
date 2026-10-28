@@ -1,7 +1,7 @@
 import fsp from 'node:fs/promises';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { appConfig } from './config';
+import { serverRoot } from './paths';
 
 /** 内置默认词库（词表文件不存在时用它创建文件） */
 const DEFAULT_WORDS = ['赌博', '毒品', '枪支', '洗钱', '自杀方法', '诈骗', '邪教', '爆炸物'];
@@ -11,8 +11,6 @@ const DEFAULT_FILE_CONTENT = [
   ...DEFAULT_WORDS,
   '',
 ].join('\n');
-
-const serverRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 
 /** 解析词表文件绝对路径：绝对路径原样使用，相对路径以 server 目录为基准 */
 function resolveWordsPath(): string {

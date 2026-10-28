@@ -8,16 +8,14 @@
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { fileURLToPath } from 'node:url';
 import { appConfig } from './config';
+import { serverRoot } from './paths';
 import type { ProviderAdapter } from './providers';
 
 /** 条目上限：超出时丢弃最旧 */
 const MAX_FACTS = 30;
 /** 单条上限字符数（Array.from 保证不截断代理对） */
 const MAX_FACT_CHARS = 60;
-
-const serverRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 
 function profileFile(): string {
   return path.resolve(serverRoot, appConfig.profilePath);
