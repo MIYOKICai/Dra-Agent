@@ -160,7 +160,8 @@ React 18 · Vite · Tailwind CSS · @xyflow/react · zustand · Node.js · Expre
 - 模型产出 HTML 经 iframe `sandbox="allow-scripts"` 隔离渲染；
 - 对话输入与输出均经敏感词双向过滤，词表可自定义；
 - 写入 / 高危工具调用必须经用户在确认卡片中授权后才会执行。
-
+## 最后
+-本项目为比赛项目，后续将继续迭代出桌面版本
 ## License
 
 本项目采用**非商业使用许可**（详见 [LICENSE](LICENSE)）：
