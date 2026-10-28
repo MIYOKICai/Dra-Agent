@@ -1,8 +1,4 @@
-# Dra-Agent
-
 <div align="center">
-
-**可视化 AI Agent 工作流画布 —— 把「编排 AI」「对话 AI」「运行 AI」做成可视、可解释、可沉浸的完整体验。**
 
 ![Dra-Agent 首页](docs/images/00-landing.png)
 
