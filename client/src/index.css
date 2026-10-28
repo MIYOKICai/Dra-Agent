@@ -1,0 +1,1541 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ===== 暗色为主的设计令牌 ===== */
+:root {
+  color-scheme: dark;
+
+  /* 背景：base（画布/页面） < panel（面板） < elevated（浮层/卡片） */
+  --bg-base: #0a0c10;
+  --bg-panel: #171a20;
+  --bg-elevated: #1e242e;
+  /* 左侧边栏底色（暗色随 panel，亮色为 #fcfcfc 稍暗一档） */
+  --bg-sidebar: #171a20;
+
+  /* 毛玻璃导航底色：半透明 base + backdrop-blur（随主题反相） */
+  --bg-glass: rgba(10, 12, 16, 0.72);
+
+  /* 描边与文字 */
+  --border-base: #262c36;
+  --text-primary: #e6edf3;
+  --text-secondary: #8b949e;
+
+  /* 主色（靛蓝系） */
+  --primary: #6366f1;
+  --primary-hover: #818cf8;
+  --primary-soft: rgba(99, 102, 241, 0.16);
+
+  /* 画布点阵网格的点色 */
+  --dot-color: rgba(255, 255, 255, 0.06);
+
+  /* 聚焦/选中光晕：ring 为贴边细环，glow 为外圈柔光 */
+  --focus-glow-ring: rgba(255, 255, 255, 0.35);
+  --focus-glow: rgba(255, 255, 255, 0.12);
+
+  /* 交互洗色（hover/active 微底色，随主题反相）：faint 4% / 默认 5% / strong 10% */
+  --wash-faint: rgba(255, 255, 255, 0.04);
+  --wash: rgba(255, 255, 255, 0.05);
+  --wash-strong: rgba(255, 255, 255, 0.1);
+
+  /* 黑白身份（mono 主按钮/激活态）：暗色=白底黑字 */
+  --mono-bg: #ffffff;
+  --mono-bg-hover: #e4e4e7;
+  --mono-fg: #09090b;
+
+  /* 连线与连接点：默认灰线 / 运行中流线 / 聚焦标识 / 句柄激活 */
+  --edge-line: #71717a;
+  --edge-running: #ffffff;
+  --focus-link: #e4e4e7;
+  --handle-active: #ffffff;
+
+  /* 状态点：idle 最暗灰 / waiting 半透明（呼吸前置态） */
+  --dot-idle: #3f3f46;
+  --dot-dim: rgba(255, 255, 255, 0.4);
+
+  /* 滚动条 */
+  --scrollbar-thumb: #3a4250;
+  --scrollbar-thumb-hover: #4b5563;
+
+  /* composer 字段聚焦描边 */
+  --field-focus-border: rgba(255, 255, 255, 0.16);
+
+  /* 骨架屏微光 */
+  --shimmer: rgba(230, 237, 243, 0.07);
+
+  /* MiniMap 视口遮罩 */
+  --minimap-mask: rgba(39, 39, 42, 0.75);
+
+  /* 节点 running 呼吸灯颜色 */
+  --node-breathe: rgba(255, 255, 255, 0.45);
+
+  /* 圆角 */
+  --radius-sm: 6px;
+  --radius-base: 10px;
+  --radius-lg: 14px;
+}
+
+/* ===== 亮色主题（白纸黑字）：html.light 反转语义令牌 =====
+   仅反转颜色变量，组件层全部走令牌/工具类，无需单独亮色样式 */
+/* 白色模式扁平化：去除全部盒阴影（含 shadow-<color> 写入 --tw-shadow-color
+   的着色投影），亮色主题下用描边与底色分层，不用投影 */
+html.light [class*='shadow-'] {
+  box-shadow: none !important;
+}
+
+html.light {
+  color-scheme: light;
+
+  /* 白色模式扁平化见上方平铺规则 */
+  /* 页面背景统一纯白：base 与 panel 同为 #fff，分层仅靠描边（--border-base） */
+  --bg-base: #ffffff;
+  --bg-panel: #ffffff;
+  --bg-elevated: #fafafa;
+  /* 左侧边栏底色：比页面白稍暗一档（#fcfcfc），与画布/对话区拉开层次 */
+  --bg-sidebar: #fcfcfc;
+
+  /* 毛玻璃导航底色：镜像 workbuddy 的 75% 白 + 模糊 */
+  --bg-glass: rgba(255, 255, 255, 0.75);
+
+  --border-base: #d4d4d8;
+  --text-primary: #18181b;
+  --text-secondary: #52525b;
+
+  /* 画布点阵网格的点色 */
+  --dot-color: rgba(9, 9, 11, 0.08);
+
+  --focus-glow-ring: rgba(24, 24, 27, 0.28);
+  --focus-glow: rgba(24, 24, 27, 0.12);
+
+  --wash-faint: rgba(0, 0, 0, 0.04);
+  --wash: rgba(0, 0, 0, 0.05);
+  --wash-strong: rgba(0, 0, 0, 0.08);
+
+  --mono-bg: #18181b;
+  --mono-bg-hover: #3f3f46;
+  --mono-fg: #fafafa;
+
+  --edge-line: #a1a1aa;
+  --edge-running: #18181b;
+  --focus-link: #3f3f46;
+  --handle-active: #18181b;
+
+  --dot-idle: #d4d4d8;
+  --dot-dim: rgba(24, 24, 27, 0.35);
+
+  --scrollbar-thumb: #d4d4d8;
+  --scrollbar-thumb-hover: #a1a1aa;
+
+  --field-focus-border: rgba(0, 0, 0, 0.16);
+
+  --shimmer: rgba(0, 0, 0, 0.06);
+
+  --minimap-mask: rgba(255, 255, 255, 0.75);
+
+  --node-breathe: rgba(24, 24, 27, 0.4);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background-color: var(--bg-base);
+  color: var(--text-primary);
+  font-family:
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    'PingFang SC',
+    'Microsoft YaHei',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ===== 统一细节：选区 / 焦点环 / 滚动条 ===== */
+
+/* 无障碍：用户偏好减弱动效时，压缩全部动画与过渡 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* 文本选区：主色 */
+::selection {
+  background: var(--primary);
+  color: #fff;
+}
+
+/* 键盘焦点环：对按钮/链接/下拉等可见；输入类控件保留自身的边框高亮方案 */
+a:focus-visible,
+button:focus-visible,
+select:focus-visible,
+summary:focus-visible,
+[role='button']:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}
+
+/* 对话滚动区底缘动态淡出（CreationPanel）：
+   mask 只影响「即将消失」的最后 32px 内容——滚动中正在移出的行渐隐，
+   静止时末行距裁剪线 64px（内容列 pb-16），完全不受遮罩影响，不会被罩白 */
+.chat-scroll-fade {
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 10px), transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 10px), transparent 100%);
+}
+
+/* 代码块滚动条（CodeBlock pre）：默认完全隐藏（透明），悬停渐显、移开渐隐；
+   scrollbar-color 在 Chrome 121+/Edge/Firefox 支持 transition，其余回退为常显 */
+.code-scroll {
+  scrollbar-color: transparent transparent;
+  transition: scrollbar-color 0.25s ease;
+}
+.code-scroll:hover {
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+}
+
+/* 细滚动条（WebKit + Firefox），颜色随主题 */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+}
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* 隐藏滚动条（画布页与对话流）：保留滚动能力，视觉上无滚动条 */
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* ===== React Flow 画布融入暗色主题 ===== */
+
+/* 全屏沉浸式画布：背景星空由 DOM 星场渲染（CanvasPage StarField，24px 网格
+   十字星），此处只铺底色；闲置时星星静止，运行时同批星星荡开+闪烁 */
+/* 画布本体背景透明：底色由外层 wrapper（bg-base）提供，
+   星场（DOM）垫在透明画布与底色之间可见；节点卡片自身 bg-panel 不透明 */
+.react-flow {
+  background-color: transparent;
+}
+
+/* ===== 星空背景 ===== */
+
+/* DOM 星场已被 Canvas 星空取代（见 CanvasPage StarField）：一颗 canvas 每帧
+   直绘全部星星，无 DOM 动画开销。这里只负责画布元素本身：垫底、不拦截事件 */
+.star-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  pointer-events: none;
+}
+
+/* 未执行分支的节点（skipped）：整卡去饱和变灰（不降透明度，保持实底背景），
+   与实际执行的分支区分 */
+.node-skipped {
+  filter: grayscale(1) brightness(0.82);
+  transition: filter 0.4s ease;
+}
+
+/* 图像节点生成中：比例占位区骨架屏——底色微亮块 + 斜向扫光循环扫过
+   （skeleton-active 时启用，扫光层为 ::after 渐变横条平移）；
+   描边颜色用确定性 rgba（主题反相），生成结束自动停 */
+.image-skeleton {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+html.light .image-skeleton {
+  background: rgba(0, 0, 0, 0.03);
+  border-color: rgba(0, 0, 0, 0.12);
+}
+.image-skeleton.skeleton-active::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  /* 宽缓扫光：亮带占 ~55% 宽、峰值柔和，缓慢滑过不突兀 */
+  background: linear-gradient(
+    105deg,
+    transparent 18%,
+    rgba(255, 255, 255, 0.05) 38%,
+    rgba(255, 255, 255, 0.11) 50%,
+    rgba(255, 255, 255, 0.05) 62%,
+    transparent 82%
+  );
+  animation: skeleton-sweep 2.4s ease-in-out infinite;
+}
+html.light .image-skeleton.skeleton-active::after {
+  background: linear-gradient(
+    105deg,
+    transparent 18%,
+    rgba(0, 0, 0, 0.04) 38%,
+    rgba(0, 0, 0, 0.08) 50%,
+    rgba(0, 0, 0, 0.04) 62%,
+    transparent 82%
+  );
+}
+@keyframes skeleton-sweep {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+/* 通用骨架条（输出节点运行中占位）：微亮底块 + 复用同一道宽缓扫光 */
+.skeleton-bar {
+  position: relative;
+  overflow: hidden;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.05);
+}
+html.light .skeleton-bar {
+  background: rgba(0, 0, 0, 0.05);
+}
+.skeleton-bar::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    105deg,
+    transparent 18%,
+    rgba(255, 255, 255, 0.05) 38%,
+    rgba(255, 255, 255, 0.11) 50%,
+    rgba(255, 255, 255, 0.05) 62%,
+    transparent 82%
+  );
+  animation: skeleton-sweep 2.4s ease-in-out infinite;
+}
+html.light .skeleton-bar::after {
+  background: linear-gradient(
+    105deg,
+    transparent 18%,
+    rgba(0, 0, 0, 0.04) 38%,
+    rgba(0, 0, 0, 0.08) 50%,
+    rgba(0, 0, 0, 0.04) 62%,
+    transparent 82%
+  );
+}
+
+/* 连接点：默认透明，节点 hover / 选中时显现（小圆点），直连时高亮放大。
+   拖动连线过程中（xyflow 给句柄挂 connectionindicator/connectingfrom/connectingto），
+   所有可落点句柄必须显现，否则看不到目标连接点导致连不上；valid = 悬停在合法落点 */
+.react-flow__node:hover .react-flow__handle,
+.react-flow__node.selected .react-flow__handle,
+.react-flow__handle.connectionindicator,
+.react-flow__handle.connectingfrom,
+.react-flow__handle.connectingto {
+  opacity: 1;
+}
+.react-flow__handle.valid,
+.react-flow__handle:hover {
+  background: var(--handle-active) !important;
+}
+/* 放大但绝不位移：xyflow 按方位给句柄写了居中 translate（left/top=(-50%,-50%)、
+   right=(50%,-50%)、bottom=(-50%,50%)），必须原样保留并把 scale 追加在其后——
+   transform 列表中 translate 在前则平移不受缩放影响；整体覆盖 transform 会丢失
+   居中导致悬停瞬间跳位 */
+.react-flow__handle-left:hover,
+.react-flow__handle-left.valid {
+  transform: translate(-50%, -50%) scale(1.35) !important;
+}
+.react-flow__handle-top:hover,
+.react-flow__handle-top.valid {
+  transform: translate(-50%, -50%) scale(1.35) !important;
+}
+.react-flow__handle-right:hover,
+.react-flow__handle-right.valid {
+  transform: translate(50%, -50%) scale(1.35) !important;
+}
+.react-flow__handle-bottom:hover,
+.react-flow__handle-bottom.valid {
+  transform: translate(-50%, 50%) scale(1.35) !important;
+}
+
+/* 抵消 @xyflow 基础样式表中内置 input/output 节点类型的外观：
+   本项目节点类型与内置类型撞名（input/output），基础样式表会给包装层
+   强加背景/边框/内边距/150px 固定宽度，形成节点外围错位的多余底框，这里全部抹平 */
+.react-flow .react-flow__node-input,
+.react-flow .react-flow__node-output {
+  background: transparent !important;
+  border: none !important;
+  padding: 0 !important;
+  width: auto !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  font-size: inherit !important;
+  color: inherit !important;
+}
+
+/* 运行中连线流动动画：edge.animated 类由执行器经 setEdgeAnimated 控制。
+   自定义 FlowEdge 给 path 挂 pathLength="1"，dash 单位为归一化路径长度：
+   0.05 + 0.05 ≈ 全程 10 段流动虚线；offset 前进一个周期（0.1）无缝行进 */
+.react-flow__edge.animated .react-flow__edge-path {
+  stroke: var(--edge-running) !important;
+  stroke-dasharray: 0.05 0.05;
+  animation: edge-dashdraw-norm 0.5s linear infinite;
+}
+@keyframes edge-dashdraw-norm {
+  to {
+    stroke-dashoffset: -0.1;
+  }
+}
+
+/* ===== 聚焦编辑模式 =====
+   画布容器挂 .focus-mode 时仅保留被选（聚焦）节点：其余节点与全部连线淡出
+   （纯 CSS 隐藏，不改 store 的 node.hidden，避免污染撤销历史与持久化数据）。
+   节点/连线常驻 opacity 过渡，进入与退出聚焦均有淡入淡出 */
+.focus-mode .react-flow__node:not(.selected) {
+  opacity: 0;
+  pointer-events: none;
+}
+.focus-mode .react-flow__edge {
+  opacity: 0;
+  pointer-events: none;
+}
+.react-flow__edge {
+  transition: opacity 0.3s ease;
+}
+/* 退出聚焦：连线"生长"画线动画——pathLength=1 归一化下 dasharray=1 恰为整段路径，
+   dashoffset 从 1 回收为 0：任何长度的连线都严格从源节点（路径起点）向目标节点画出；
+   窗口（.focus-exit，780ms）结束后移除 dasharray 恢复实线 */
+.focus-exit .react-flow__edge-path {
+  stroke-dasharray: 1;
+  animation: edge-draw 0.65s cubic-bezier(0.3, 0.6, 0.3, 1) forwards;
+}
+@keyframes edge-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+/* 剪刀光标：触摸到连线（含隐形加宽热区）即显示剪刀，点击剪断（onEdgeClick）。
+   双描边（白底黑刃）保证明暗两主题下都可见；热点 (14,12) 对准两刃交点 */
+.react-flow__edge,
+.react-flow__edge .react-flow__edge-interaction {
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='26' height='26' viewBox='0 0 26 26'%3E%3Cg fill='none' stroke='white' stroke-width='4' stroke-linecap='round'%3E%3Ccircle cx='6' cy='7' r='2.6'/%3E%3Ccircle cx='6' cy='19' r='2.6'/%3E%3Cpath d='M8.3 8.6 20.5 16.8M8.3 17.4 20.5 9.2'/%3E%3C/g%3E%3Cg fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round'%3E%3Ccircle cx='6' cy='7' r='2.6'/%3E%3Ccircle cx='6' cy='19' r='2.6'/%3E%3Cpath d='M8.3 8.6 20.5 16.8M8.3 17.4 20.5 9.2'/%3E%3C/g%3E%3C/svg%3E") 15 13, crosshair;
+}
+/* 节点位移过渡动画：所有程序性移动（进入/退出聚焦、位置还原、模板加载等）
+   平滑滑动；拖拽中 xyflow 会给节点挂 .dragging 类，此时关闭过渡保证 1:1 跟手。
+   注意 .dragging 只挂在被直接拖拽的节点上——多选框拖拽时被一并移动的其他节点
+   拿不到该类，0.35s 缓动会让节点滞后于瞬时到位的连线（节点跟不上线），
+   因此 :active（指针按下：拖节点/拖选区/平移）期间全局禁用过渡 */
+.react-flow__node {
+  transition:
+    transform 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 0.3s ease;
+}
+.react-flow:active .react-flow__node {
+  transition: none;
+}
+.react-flow__node.dragging {
+  transition: none;
+}
+/* 挂载引导期（canvas-boot）：初次进入画布时 RF 先挂载节点再应用真实坐标 +
+   fitView，期间的位置变化会被上面的过渡播成"节点飞入再弹回"。引导期内
+   强制关闭节点过渡，画布页挂载约 700ms 后移除该类，恢复正常动画 */
+.canvas-boot .react-flow__node {
+  transition: none;
+}
+/* 模板投影（TemplatePreview）：展示型 RF 实例，禁止节点位移过渡——
+   与 canvas-boot 同理，避免首帧定位被播成动画 */
+.template-preview .react-flow__node {
+  transition: none;
+}
+/* 聚焦节点放大：缩放 NodeShell 内部卡片（node-card）而非 .react-flow__node 的
+   transform——后者承载 RF 的 translate 定位，直接覆盖会破坏定位导致节点跳位；
+   transition 挂在基础态，退出聚焦时平滑缩回 */
+.react-flow__node .node-card {
+  transition: transform 0.3s ease;
+}
+.focus-mode .react-flow__node.selected .node-card {
+  transform: scale(1.12);
+  transform-origin: center;
+}
+
+/* MiniMap / Controls（若启用）：单色化 */
+.react-flow__controls {
+  box-shadow: none;
+}
+.react-flow__controls-button {
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border-base);
+}
+.react-flow__controls-button:hover {
+  background: var(--bg-elevated);
+}
+.react-flow__controls-button svg {
+  fill: var(--text-secondary);
+}
+.react-flow__minimap {
+  background: var(--bg-panel) !important;
+}
+.react-flow__minimap-mask {
+  fill: var(--minimap-mask);
+}
+
+@keyframes edge-dashdraw {
+  to {
+    stroke-dashoffset: -12;
+  }
+}
+
+/* 落地页工作流示意：连线流动（复用同一节奏） */
+.flow-dash {
+  stroke-dasharray: 6 6;
+  animation: edge-dashdraw 0.9s linear infinite;
+}
+
+/* 节点标签编辑输入框：去掉默认外观 */
+.node-label-input {
+  outline: none;
+}
+
+/* 聚焦连线标识（CanvasPage FocusLink）：stroke/fill 走主题变量，
+   CSS 规则优先级高于 SVG 表现属性，实现暗/亮自适应 */
+.focus-link {
+  stroke: var(--focus-link);
+}
+.focus-link-dot {
+  fill: var(--focus-link);
+}
+
+/* 流式输出光标：文本末尾方块闪烁 */
+.streaming-cursor {
+  display: inline-block;
+  margin-left: 1px;
+  animation: cursor-blink 1s step-end infinite;
+}
+
+/* AI 生成装配：节点从左到右逐个入场（上浮 + 缩放 + 淡入），NodeShell 挂 .animate-node-enter */
+@keyframes node-enter {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.animate-node-enter {
+  animation: node-enter 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* 拖入落点：节点从幽灵卡片尺寸（1/画布缩放）平滑缩放到实际渲染大小（--spawn-from 注入） */
+@keyframes node-spawn {
+  from {
+    opacity: 0.9;
+    transform: scale(var(--spawn-from, 1.6));
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.animate-node-spawn {
+  animation: node-spawn 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* 侧边栏行尾操作条：果冻式滑入（先过冲再回弹，Q 弹落位；RowActions 挂 .row-actions-jelly） */
+@keyframes row-actions-jelly {
+  0% {
+    opacity: 0;
+    transform: translateX(16px) scale(0.6);
+  }
+  55% {
+    opacity: 1;
+    transform: translateX(-2px) scale(1.12);
+  }
+  76% {
+    transform: translateX(1px) scale(0.94);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+.row-actions-jelly {
+  animation: row-actions-jelly 0.46s cubic-bezier(0.3, 0.75, 0.4, 1) both;
+}
+
+/* 行内重命名框 / 确认选项出现：右侧轻滑 + 淡入（与操作条同向，弱化版） */
+@keyframes row-pop-in {
+  from {
+    opacity: 0;
+    transform: translateX(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* 浮层/指示条入场：自下 10px 升起淡入（编排指示条、批量操作工具条、空态卡片） */
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-rise-in {
+  animation: rise-in 0.28s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.row-pop-in {
+  animation: row-pop-in 0.26s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* 对话代码预览列内容：宽度由父级 width 过渡展开，内容稍延迟淡入（避免 iframe 白屏突兀） */
+.preview-fade-in {
+  animation: preview-fade-in 0.32s ease-out 0.06s both;
+}
+@keyframes preview-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes cursor-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+
+/* ===== 骨架屏：shimmer 微光扫过 ===== */
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: var(--bg-elevated);
+  border-radius: var(--radius-sm);
+}
+.skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, var(--shimmer), transparent);
+  animation: skeleton-sweep 1.4s ease-in-out infinite;
+}
+
+@keyframes skeleton-sweep {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+/* ===== 落地页装饰：网格背景 / 渐变光斑 ===== */
+
+/* 细网格 + 径向淡出遮罩 */
+.landing-grid {
+  background-image:
+    linear-gradient(rgba(99, 102, 241, 0.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(99, 102, 241, 0.07) 1px, transparent 1px);
+  background-size: 44px 44px;
+  -webkit-mask-image: radial-gradient(ellipse 90% 70% at 50% 0%, #000 40%, transparent 100%);
+  mask-image: radial-gradient(ellipse 90% 70% at 50% 0%, #000 40%, transparent 100%);
+}
+
+/* 渐变光斑：模糊圆形，缓慢漂浮 */
+.landing-blob {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(90px);
+  pointer-events: none;
+  animation: blob-float 14s ease-in-out infinite alternate;
+}
+
+@keyframes blob-float {
+  from {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  to {
+    transform: translate3d(30px, -24px, 0) scale(1.08);
+  }
+}
+
+/* 主标题渐变文字 */
+.landing-gradient-text {
+  background: linear-gradient(100deg, #a5b4fc 0%, #818cf8 35%, #7dd3fc 70%, #6ee7b7 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* ===== 配置面板创作台（composer-scope）：输入块用区别于面板的底色 + 发丝描边 =====
+   仅作用于 ConfigPanel 正文（.composer-scope 容器），不影响其他面板的常规表单样式；
+   底色取 --bg-base（暗色更深 / 亮色更浅），与面板 --bg-panel 拉开层次，便于辨认输入区；
+   选择器带 .composer-scope 前缀，优先级高于 fieldControlClass 与 Tailwind 的 bg-* 工具类 */
+.composer-scope input:not([type='checkbox']):not([type='range']),
+.composer-scope textarea,
+.composer-scope select {
+  border-color: var(--border-base);
+  background-color: var(--bg-base);
+}
+.composer-scope input:not([type='checkbox']):not([type='range']):hover:not(:focus),
+.composer-scope textarea:hover:not(:focus),
+.composer-scope select:hover:not(:focus) {
+  border-color: var(--field-focus-border);
+}
+.composer-scope input:not([type='checkbox']):not([type='range']):focus,
+.composer-scope textarea:focus,
+.composer-scope select:focus {
+  border-color: var(--field-focus-border);
+  background-color: var(--bg-base);
+}
+/* 多选勾选组容器：同样使用输入块底色，和正文输入区保持同一层级 */
+.composer-scope .field-group {
+  border-color: var(--border-base);
+  background-color: var(--bg-base);
+}
+
+/* ===== 落地页动效（Landing）：星场 / 标题 / 磁性按钮 / 工作流演示 / 滚动渐入 / FAQ ===== */
+
+/* --- 星点微光场：两层反向缓漂，星点随机闪烁（负 delay → 载入即随机相位） --- */
+.lp-starfield {
+  position: absolute;
+  inset: -8%;
+}
+.lp-starfield-far {
+  animation: lp-drift 90s ease-in-out infinite alternate-reverse;
+}
+.lp-starfield-near {
+  animation: lp-drift 60s ease-in-out infinite alternate;
+}
+@keyframes lp-drift {
+  from {
+    transform: translate3d(-1.5%, 1.2%, 0) scale(1);
+  }
+  to {
+    transform: translate3d(1.5%, -1.5%, 0) scale(1.05);
+  }
+}
+.lp-star {
+  position: absolute;
+  border-radius: 9999px;
+  background: var(--mono-bg);
+  opacity: 0.55;
+  animation: lp-twinkle var(--dur, 4s) ease-in-out infinite;
+}
+/* 十字星：伪元素画横竖两道光针 */
+.lp-star-cross::before,
+.lp-star-cross::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  border-radius: 1px;
+  background: var(--mono-bg);
+}
+.lp-star-cross::before {
+  width: 11px;
+  height: 1px;
+}
+.lp-star-cross::after {
+  width: 1px;
+  height: 11px;
+}
+@keyframes lp-twinkle {
+  0%,
+  100% {
+    opacity: var(--min, 0.15);
+    transform: scale(0.75);
+  }
+  50% {
+    opacity: var(--max, 0.9);
+    transform: scale(1.2);
+  }
+}
+/* 中心径向微光（mono 令牌反相，明暗两主题自适应） */
+.lp-glow {
+  background: radial-gradient(ellipse 62% 46% at 50% 26%, var(--focus-glow), transparent 70%);
+}
+
+/* --- Hero 标题：逐字 blur 入场 --- */
+.lp-char {
+  display: inline-block;
+  animation: lp-char-in 0.7s cubic-bezier(0.2, 0.65, 0.25, 1) backwards;
+}
+@keyframes lp-char-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.45em) scale(0.96);
+    filter: blur(10px);
+  }
+  60% {
+    filter: blur(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+}
+/* Hero 标题光泽层：background-clip:text 移动渐变，周期性一道高光扫过 */
+.lp-shine {
+  background-image: linear-gradient(110deg, var(--text-primary) 42%, #ffffff 50%, var(--text-primary) 58%);
+  background-size: 240% 100%;
+  background-repeat: no-repeat;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  animation:
+    lp-shine-move 5.6s ease-in-out infinite,
+    lp-soft-in 0.9s ease-out 1.5s backwards;
+}
+@keyframes lp-shine-move {
+  0%,
+  52% {
+    background-position: 130% 0;
+  }
+  100% {
+    background-position: -30% 0;
+  }
+}
+@keyframes lp-soft-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* --- 磁性按钮：位移回弹过渡 + 主 CTA 光晕（transform 由 JS 内联写入） --- */
+.lp-magnetic {
+  transition:
+    transform 0.18s ease-out,
+    background-color 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease,
+    box-shadow 0.3s ease;
+  will-change: transform;
+}
+.lp-cta-glow:hover {
+  box-shadow:
+    0 0 44px var(--focus-glow),
+    0 0 16px var(--focus-glow);
+}
+
+/* --- 迷你工作流演示：10s 循环编排（节点点亮 → 连线生长 → 终点脉冲 → 复位） --- */
+/* 连线：pathLength=1 归一化，dashoffset 1→0 画线生长，末端淡出后跳回隐藏态 */
+.lp-demo-edge {
+  fill: none;
+  stroke: var(--edge-line);
+  stroke-width: 1.5;
+  stroke-dasharray: 1;
+  animation: lp-demo-edge 10s linear infinite backwards;
+}
+@keyframes lp-demo-edge {
+  0% {
+    stroke-dashoffset: 1;
+    stroke: var(--edge-running);
+    opacity: 1;
+  }
+  12% {
+    stroke-dashoffset: 0;
+  }
+  58% {
+    stroke: var(--edge-running);
+    opacity: 1;
+  }
+  70% {
+    stroke: var(--edge-line);
+    opacity: 0.35;
+  }
+  78% {
+    opacity: 0;
+  }
+  78.01% {
+    stroke-dashoffset: 1;
+  }
+  100% {
+    stroke-dashoffset: 1;
+    stroke: var(--edge-running);
+    opacity: 1;
+  }
+}
+/* 节点点亮：白描边 + 呼吸辉光（mono/node-breathe 令牌随主题反相） */
+.lp-demo-node {
+  animation: lp-demo-node 10s linear infinite backwards;
+}
+@keyframes lp-demo-node {
+  0% {
+    border-color: var(--border-base);
+    box-shadow: 0 0 0 0 transparent;
+  }
+  3% {
+    border-color: var(--mono-bg);
+    box-shadow: 0 0 22px var(--node-breathe);
+  }
+  45% {
+    border-color: var(--mono-bg);
+    box-shadow: 0 0 22px var(--node-breathe);
+  }
+  52%,
+  100% {
+    border-color: var(--border-base);
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+/* 状态点与节点同相位点亮 */
+.lp-demo-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background: var(--dot-idle);
+  animation: lp-demo-dot 10s linear infinite backwards;
+}
+@keyframes lp-demo-dot {
+  0% {
+    background: var(--dot-idle);
+  }
+  3%,
+  45% {
+    background: var(--mono-bg);
+  }
+  52%,
+  100% {
+    background: var(--dot-idle);
+  }
+}
+/* 终点节点：更短点亮窗 + 外扩脉冲环（与主链错峰，保证循环间完全复位） */
+.lp-demo-node-end {
+  animation-name: lp-demo-node-end;
+}
+@keyframes lp-demo-node-end {
+  0% {
+    border-color: var(--border-base);
+    box-shadow: 0 0 0 0 transparent;
+  }
+  3% {
+    border-color: var(--mono-bg);
+    box-shadow: 0 0 30px var(--node-breathe);
+  }
+  30% {
+    border-color: var(--mono-bg);
+    box-shadow: 0 0 30px var(--node-breathe);
+  }
+  38%,
+  100% {
+    border-color: var(--border-base);
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+.lp-demo-dot-end {
+  animation-name: lp-demo-dot-end;
+}
+@keyframes lp-demo-dot-end {
+  0% {
+    background: var(--dot-idle);
+  }
+  3%,
+  30% {
+    background: var(--mono-bg);
+  }
+  38%,
+  100% {
+    background: var(--dot-idle);
+  }
+}
+.lp-demo-pulse {
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  border: 1px solid var(--mono-bg);
+  opacity: 0;
+  pointer-events: none;
+  animation: lp-demo-pulse 10s linear infinite backwards;
+}
+@keyframes lp-demo-pulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.75;
+  }
+  13% {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+}
+
+/* --- 滚动渐入（统一微动语言）：进入视口 opacity 0→1 + 24px 上浮 + 0.98 缩放，
+       700ms 长缓曲线（IntersectionObserver once，组内子元素用 transitionDelay stagger） --- */
+.lp-reveal {
+  opacity: 0;
+  transform: translateY(24px) scale(0.98);
+  transition:
+    opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.lp-reveal.is-visible {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+/* 减弱动效：跳过中间态直接呈现终态（JS 侧也已跳过，此处兜底防首帧闪隐） */
+@media (prefers-reduced-motion: reduce) {
+  .lp-reveal {
+    opacity: 1;
+    transform: none;
+  }
+}
+/* 收尾 CTA 条：渐入上浮到位后亮起一圈克制的静态光晕（box-shadow 过渡稍长更柔） */
+.lp-cta-card {
+  transition:
+    opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.7s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.9s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.lp-cta-card.is-visible {
+  box-shadow:
+    0 0 90px rgba(255, 255, 255, 0.05),
+    0 30px 60px -40px rgba(0, 0, 0, 0.9);
+}
+
+/* --- FAQ 手风琴：grid-template-rows 0fr→1fr 平滑展开/收起（子层 overflow:hidden 裁切） --- */
+.lp-faq-panel {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.35s cubic-bezier(0.2, 0.65, 0.25, 1);
+}
+.lp-faq-panel.open {
+  grid-template-rows: 1fr;
+}
+.lp-faq-panel > div {
+  overflow: hidden;
+}
+
+/* ===== 落地页电影感背景：定点光 / 光轴 / 颗粒 / 暗角 ===== */
+
+/* 多层定点光叠加：顶点聚光 + 右上冷灰气隙光 + 左上侧光 + 地平线反光，
+   18s 极缓呼吸（scale + 位移），模拟棚拍黑场的空气感 */
+.lp-aurora {
+  background:
+    radial-gradient(ellipse 68% 46% at 50% -10%, rgba(255, 255, 255, 0.16), transparent 62%),
+    radial-gradient(ellipse 52% 40% at 82% 18%, rgba(128, 136, 152, 0.11), transparent 70%),
+    radial-gradient(ellipse 58% 46% at 14% 34%, rgba(96, 104, 120, 0.1), transparent 72%),
+    radial-gradient(ellipse 90% 56% at 50% 106%, rgba(255, 255, 255, 0.07), transparent 68%);
+  animation: lp-aurora-breathe 18s ease-in-out infinite alternate;
+  will-change: transform, opacity;
+}
+@keyframes lp-aurora-breathe {
+  from {
+    transform: scale(1) translate3d(0, 0, 0);
+    opacity: 0.88;
+  }
+  to {
+    transform: scale(1.07) translate3d(0, -1.2%, 0);
+    opacity: 1;
+  }
+}
+
+/* 两道斜向光轴：极低亮度，只在大面积深色上显形，像摄影棚的侧逆光 */
+.lp-beams {
+  background:
+    linear-gradient(104deg, transparent 40%, rgba(255, 255, 255, 0.055) 46%, transparent 53%),
+    linear-gradient(76deg, transparent 58%, rgba(255, 255, 255, 0.035) 64%, transparent 71%);
+  mix-blend-mode: screen;
+  opacity: 0.75;
+}
+
+/* 暗角：四周压暗，把视线收拢到画面中心（电影镜头常见收边） */
+.lp-vignette {
+  background: radial-gradient(ellipse 94% 82% at 50% 40%, transparent 40%, rgba(0, 0, 0, 0.62) 100%);
+}
+
+/* 胶片颗粒：SVG feTurbulence 生成噪点，overlay 混合 + steps 位移抖动（模拟胶片滚动） */
+.lp-grain {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+  opacity: 0.05;
+  mix-blend-mode: overlay;
+  animation: lp-grain-shift 6s steps(5) infinite;
+}
+@keyframes lp-grain-shift {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  20% {
+    transform: translate3d(-2%, 1%, 0);
+  }
+  40% {
+    transform: translate3d(1%, -2%, 0);
+  }
+  60% {
+    transform: translate3d(-1%, 2%, 0);
+  }
+  80% {
+    transform: translate3d(2%, -1%, 0);
+  }
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+/* --- Hero 标题：逐行 blur 上浮入场（整行入场，保证渐变文字连续）
+       用 transition 翻转而非 animation：节流标签页里动画可能停在首帧，
+       元素会永久性不可见；transition 在恢复渲染后必然到达 .is-in 终态 --- */
+.lp-rise {
+  opacity: 0;
+  transform: translateY(28px);
+  filter: blur(12px);
+  transition:
+    opacity 0.95s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.95s cubic-bezier(0.16, 1, 0.3, 1),
+    filter 0.95s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: transform, opacity, filter;
+}
+.lp-rise.is-in {
+  opacity: 1;
+  transform: none;
+  filter: blur(0);
+}
+
+/* 首行标题渐变：白 → 浅灰，模拟顶光打在大字号上的体积感 */
+.lp-hero-grad {
+  background-image: linear-gradient(177deg, #ffffff 6%, #f2f2f4 44%, #9a9aa3 122%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Hero 底部滚动提示：一根竖线里光点下落，节奏缓慢克制 */
+.lp-scroll-cue {
+  height: 52px;
+  display: flex;
+  justify-content: center;
+}
+.lp-scroll-cue span {
+  position: relative;
+  display: block;
+  width: 1px;
+  height: 100%;
+  overflow: hidden;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.24), transparent);
+}
+.lp-scroll-cue span::after {
+  content: '';
+  position: absolute;
+  left: -0.5px;
+  width: 2px;
+  height: 18px;
+  background: linear-gradient(180deg, transparent, #ffffff);
+  animation: lp-cue 2.6s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+@keyframes lp-cue {
+  from {
+    top: -20px;
+    opacity: 0;
+  }
+  30% {
+    opacity: 0.9;
+  }
+  to {
+    top: 52px;
+    opacity: 0;
+  }
+}
+
+/* --- 展示屏：玻璃外壳的顶部受光边 + 落影，突出「产品悬浮在暗场中」 --- */
+.lp-screen {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 60px 120px -60px rgba(0, 0, 0, 1),
+    0 0 90px -40px rgba(255, 255, 255, 0.12);
+}
+/* 画布内部点阵 + 自上而下的明暗渐变，制造屏幕发光的层次 */
+.lp-canvas-grid {
+  background-image: radial-gradient(rgba(255, 255, 255, 0.11) 1px, transparent 1px);
+  background-size: 24px 24px;
+  mask-image: radial-gradient(ellipse 80% 80% at 50% 42%, #000 30%, transparent 82%);
+  -webkit-mask-image: radial-gradient(ellipse 80% 80% at 50% 42%, #000 30%, transparent 82%);
+  opacity: 0.55;
+}
+
+/* --- 模型跑马灯：无限左移，两端渐隐裁切 --- */
+.lp-marquee {
+  overflow: hidden;
+  mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+}
+.lp-marquee-track {
+  display: flex;
+  width: max-content;
+  animation: lp-marquee 34s linear infinite;
+  will-change: transform;
+}
+.lp-marquee:hover .lp-marquee-track {
+  animation-play-state: paused;
+}
+@keyframes lp-marquee {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+/* 卡片内的流程图连线：高光沿线段流动 */
+.lp-flow-line {
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.38), rgba(255, 255, 255, 0.08));
+  background-size: 200% 100%;
+  animation: lp-flow 3.4s linear infinite;
+}
+@keyframes lp-flow {
+  to {
+    background-position: -200% 0;
+  }
+}
+
+/* --- Bento 卡内骨架演示：骨架条扫光 / 流式逐行生长 / 行顺序点亮 / 进度填充 --- */
+/* 骨架条：浅灰圆角条 + 高光扫过 */
+.lp-sk-bar {
+  position: relative;
+  overflow: hidden;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.08);
+}
+.lp-sk-bar::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent 20%, rgba(255, 255, 255, 0.22) 50%, transparent 80%);
+  animation: lp-sk-sweep 3.2s ease-in-out infinite;
+}
+@keyframes lp-sk-sweep {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+/* 块状占位（图标/缩略图）：缓慢呼吸明暗 */
+.lp-sk-block {
+  background: rgba(255, 255, 255, 0.08);
+  animation: lp-sk-block 3.6s ease-in-out infinite;
+}
+@keyframes lp-sk-block {
+  50% {
+    background: rgba(255, 255, 255, 0.16);
+  }
+}
+
+/* 流式骨架行：从左生长到满宽（行间错峰），一轮末尾整体淡出再重来 */
+.lp-sk-line {
+  position: relative;
+  overflow: hidden;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.09);
+  transform-origin: left center;
+  animation: lp-sk-grow 7s cubic-bezier(0.32, 0, 0.18, 1) infinite backwards;
+}
+.lp-sk-line::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent 25%, rgba(255, 255, 255, 0.2) 50%, transparent 75%);
+  animation: lp-sk-sweep 3.2s ease-in-out infinite;
+}
+@keyframes lp-sk-grow {
+  0% {
+    transform: scaleX(0);
+    opacity: 0;
+  }
+  5% {
+    opacity: 1;
+  }
+  18% {
+    transform: scaleX(1);
+  }
+  86% {
+    transform: scaleX(1);
+    opacity: 1;
+  }
+  94%,
+  100% {
+    transform: scaleX(1);
+    opacity: 0;
+  }
+}
+
+/* 行尾闪烁光标 */
+.lp-sk-caret {
+  width: 2px;
+  height: 12px;
+  border-radius: 1px;
+  background: rgba(255, 255, 255, 0.85);
+  animation: cursor-blink 1s step-end infinite;
+}
+
+/* 骨架行依次点亮：描边、微底与外发光，与主视觉节点同一套语言 */
+.lp-sk-row {
+  animation: lp-sk-row 8s linear infinite backwards;
+}
+@keyframes lp-sk-row {
+  0% {
+    border-color: rgba(255, 255, 255, 0.07);
+    background-color: rgba(255, 255, 255, 0.02);
+    box-shadow: 0 0 0 0 transparent;
+  }
+  3%,
+  26% {
+    border-color: rgba(255, 255, 255, 0.3);
+    background-color: rgba(255, 255, 255, 0.055);
+    box-shadow: 0 0 20px -6px rgba(255, 255, 255, 0.32);
+  }
+  34%,
+  100% {
+    border-color: rgba(255, 255, 255, 0.07);
+    background-color: rgba(255, 255, 255, 0.02);
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+/* 检索进度：从 0 填到目标宽度，停留后回落 */
+.lp-sk-fill {
+  transform-origin: left center;
+  animation: lp-sk-fill 6s cubic-bezier(0.32, 0, 0.18, 1) infinite backwards;
+}
+@keyframes lp-sk-fill {
+  0% {
+    transform: scaleX(0);
+  }
+  30%,
+  86% {
+    transform: scaleX(1);
+  }
+  96%,
+  100% {
+    transform: scaleX(0);
+  }
+}
+
+/* --- 能力横向滚动条：隐藏原生滚动条，保留原生横向滚动与贴磁对齐 --- */
+.lp-rail {
+  scrollbar-width: none;
+  overscroll-behavior-x: contain;
+}
+.lp-rail::-webkit-scrollbar {
+  display: none;
+}
+
+/* --- 生态跑马灯：两份相同半区循环平移，两端渐隐遮罩 --- */
+.lp-marquee-mask {
+  mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+}
+.lp-marquee-track {
+  display: flex;
+  width: max-content;
+  animation: lp-marquee 32s linear infinite;
+}
+@keyframes lp-marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lp-marquee-track {
+    animation: none;
+  }
+}
+
+/* --- Bento 卡：左上角透光亮起 + 底部沉黑，配发丝描边；hover 轻微抬升 --- */
+.lp-bento {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    radial-gradient(120% 100% at 0% 0%, rgba(255, 255, 255, 0.075), transparent 55%),
+    linear-gradient(180deg, #0d0d0f 0%, #08080a 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  transition:
+    transform 0.55s cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 0.55s ease,
+    box-shadow 0.55s ease;
+}
+/* 内容抬到光斑之上，保证任何亮度下文字都可读 */
+.lp-bento > * {
+  position: relative;
+  z-index: 1;
+}
+/* 光标跟随的受光斑：位置由 JS 写入 --mx/--my，hover 时淡入 */
+.lp-bento::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(
+    260px circle at var(--mx, 50%) var(--my, 0%),
+    rgba(255, 255, 255, 0.1),
+    transparent 66%
+  );
+  opacity: 0;
+  transition: opacity 0.45s ease;
+  pointer-events: none;
+}
+.lp-bento:hover::after {
+  opacity: 1;
+}
+.lp-bento:hover {
+  transform: translateY(-4px);
+  border-color: rgba(255, 255, 255, 0.18);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.09),
+    0 36px 80px -52px rgba(0, 0, 0, 1),
+    0 0 60px -34px rgba(255, 255, 255, 0.2);
+}
+
+/* --- 收尾地平线反光：底部一片极淡的白色光带，像片尾的最后一束光 --- */
+.lp-outro-glow {
+  background: radial-gradient(ellipse 64% 88% at 50% 100%, rgba(255, 255, 255, 0.11), transparent 68%);
+}
+
+/* 减弱动效：背景呼吸、颗粒抖动、跑马灯、滚动提示、流动连线全部静止 */
+@media (prefers-reduced-motion: reduce) {
+  .lp-aurora,
+  .lp-grain,
+  .lp-marquee-track,
+  .lp-scroll-cue span::after,
+  .lp-flow-line,
+  .lp-sk-bar::after,
+  .lp-sk-block,
+  .lp-sk-line,
+  .lp-sk-line::after,
+  .lp-sk-row,
+  .lp-sk-fill,
+  .lp-sk-caret {
+    animation: none;
+  }
+  .lp-rise {
+    opacity: 1;
+    transform: none;
+    filter: none;
+    transition: none;
+  }
+  .lp-scroll-cue span::after {
+    display: none;
+  }
+}
+
+/* --- 落地页纯黑观感：页面根节点把语义令牌固定为参考稿的 zinc 灰阶，
+       星场/标题光泽/演示循环等 lp-* 动效随取值统一到纯黑版式 --- */
+.lp-root {
+  /* 落地页恒为暗场：显式声明底色与字色，避免亮色主题下继承到浅色文字/背景 */
+  color-scheme: dark;
+  background-color: #050505;
+  color: #fafafa;
+  --bg-base: #050505;
+  --bg-panel: #0d0d0d;
+  --bg-elevated: #111113;
+  --border-base: rgba(39, 39, 42, 0.6);
+  --text-primary: #fafafa;
+  --text-secondary: #a1a1aa;
+  --edge-line: #52525b;
+  --edge-running: #ffffff;
+  --mono-bg: #ffffff;
+  --mono-bg-hover: #e4e4e7;
+  --mono-fg: #09090b;
+  --node-breathe: rgba(255, 255, 255, 0.45);
+  --dot-idle: #3f3f46;
+  --focus-glow: rgba(255, 255, 255, 0.12);
+  --wash-faint: rgba(255, 255, 255, 0.04);
+}
+
+/* ===== 选择模式框选矩形 =====
+   拖拽中的实时矩形（.react-flow__selection）：贴手即画，正常描边，走主题令牌；
+   框选完成后的节点选区矩形（.react-flow__nodesselection-rect）：RF 按节点边界
+   紧贴定位（内联样式无法覆写），用 outline + outline-offset 让虚线框悬浮在
+   节点边界外 8px，与节点保持呼吸距离（outline 不占布局、可脱离元素边缘） */
+.react-flow__selection {
+  background: var(--wash-strong);
+  border: 1px solid var(--focus-glow-ring);
+  border-radius: 6px;
+}
+
+.react-flow__nodesselection-rect {
+  background: transparent;
+  border: none;
+  outline: 1px dashed var(--focus-glow-ring);
+  outline-offset: 8px;
+  border-radius: 6px;
+}
+
+/* 填充底色移到 ::before 并向四周外扩 8px，与悬浮虚线框对齐——
+   元素本体背景必须透明，否则底色仍贴节点边界（无间隔）；
+   阴影与节点选中光晕同款令牌（暗=白光/亮=黑柔光），框选整体有浮起感 */
+.react-flow__nodesselection-rect::before {
+  content: '';
+  position: absolute;
+  inset: -8px;
+  background: var(--wash-faint);
+  border-radius: 12px;
+  box-shadow:
+    0 0 0 1px var(--focus-glow-ring),
+    0 0 18px var(--focus-glow);
+}
+
+/* ===== 文档编辑器（DocEditor）：contentEditable 空态占位 =====
+   空正文时以 :empty 命中（序列化清空后会手动移除残留空段落保证匹配），
+   文案由编辑区 data-placeholder 提供，颜色取次要文字色再压淡 */
+.doc-editor-body:empty::before {
+  content: attr(data-placeholder);
+  color: var(--text-secondary);
+  opacity: 0.45;
+  pointer-events: none;
+}

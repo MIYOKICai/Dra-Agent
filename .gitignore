@@ -1,0 +1,36 @@
+# 依赖
+node_modules/
+
+# 构建产物
+dist/
+build/
+
+# 环境变量（含密钥，禁止提交）
+.env
+.env.local
+.env.*.local
+
+# 日志
+*.log
+npm-debug.log*
+
+# 编辑器 / 系统
+.DS_Store
+Thumbs.db
+*.local
+
+# IDE 工作区配置（本地保留，不随开源发布）
+.trae/
+.vscode/
+
+# 调试 / 自动化产物
+.screenshots/
+.tmp-kb/
+.verify/
+
+# 运行时数据（本地保留：知识库文档、上传文件、用户画像、设置）
+server/data/
+server/sensitive-words.txt
+
+# 参赛文档（本地保留，不随开源发布）
+作品介绍文档.md

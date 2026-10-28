@@ -1,0 +1,18 @@
+{
+  "name": "dra-agent",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Agent 画布 —— 可视化 AI 工作流创作平台（client + server 双包 monorepo）",
+  "scripts": {
+    "dev": "concurrently -n CLIENT,SERVER -c cyan,green \"npm --prefix client run dev\" \"npm --prefix server run dev\"",
+    "install:all": "npm install && npm --prefix client install && npm --prefix server install",
+    "lint": "npm --prefix client run lint",
+    "build:client": "npm --prefix client run build",
+    "build:server": "npm --prefix server run build",
+    "typecheck": "npm --prefix client run typecheck && npm --prefix server run typecheck"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0",
+    "prettier": "^3.3.3"
+  }
+}
