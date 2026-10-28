@@ -1,13 +1,23 @@
 # Dra-Agent
 
-> 可视化 AI Agent 工作流画布 —— 把「编排 AI」「对话 AI」「运行 AI」做成可视、可解释、可沉浸的完整体验。
+<div align="center">
+
+**可视化 AI Agent 工作流画布 —— 把「编排 AI」「对话 AI」「运行 AI」做成可视、可解释、可沉浸的完整体验。**
+
+![Dra-Agent 首页](docs/images/00-landing.png)
+
+![License](https://img.shields.io/badge/License-Non--Commercial-blue)
+![Node](https://img.shields.io/badge/node-%E2%89%A518-339933?logo=node.js&logoColor=white)
+![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)
+![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)
+![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)
+
+</div>
 
 **Dra-Agent** 是一个开箱即用的 AI 工作流创作平台（React 前端 + Node 服务网关双端 monorepo），提供两条互补的创作路径：
 
 - **画布编排**：拖拽节点、连线，编排「输入 → 大模型 → 知识检索 → 条件分支 → 图像生成 → 输出」工作流；一键运行，数据沿连线流动、节点逐个点亮，AI 的决策路径全程可视。
 - **一键创作（对话 Agent）**：服务端驱动的完整对话智能体——多模态输入、RAG 知识检索、ReAct 工具循环、长期记忆、风险分级授权确认；生成的网页代码可就地分栏实时预览。
-
-![画布工作台](docs/images/01-canvas.png)
 
 ## 功能特性
 
@@ -16,6 +26,8 @@
 - **7 类节点**：输入 / LLM / Agent / 图像生成 / 知识检索 / 条件分支 / 输出，拖拽即建、连线即通
 - **运行引擎**：拓扑排序调度、连线流动动画、节点状态点亮；条件分支未触发的路径逐边显示警戒标记（逐边级联算法，保护多父汇聚节点）
 - **画布管理**：多画布创建 / 切换 / 缩略图，自动保存（localStorage 持久化）；成环检测、剪刀光标剪线、节点聚焦模式
+
+![画布工作台](docs/images/01-canvas.png)
 
 ### 对话 Agent（一键创作）
 
