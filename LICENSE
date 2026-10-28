@@ -1,21 +1,42 @@
-MIT License
+Dra-Agent Non-Commercial License（非商业使用许可）
 
 Copyright (c) 2026 MIYOKIGames
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+in the Software without restriction, including the rights to use, copy,
+modify, merge, publish, and distribute copies of the Software, **provided
+that such use is strictly for learning, research and personal non-commercial
+purposes. Any commercial use, including but not limited to selling the
+Software or incorporating it into commercial products or services, is
+strictly prohibited.**
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+The above copyright notice and this license text shall be included in all
+copies or substantial portions of the Software. Any redistribution of the
+Software, in source or binary form, must retain this license unchanged.
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
 AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+--------------------------------------------------------------------------
+
+版权所有（c）2026 MIYOKIGames
+
+特此免费授予任何获得本软件及其相关文档副本（下称「软件」）的人士使用本软件的
+权利，包括使用、复制、修改、合并、发布和分发软件副本，**但前提是此类使用严格
+限于学习、研究和个人非商业用途。任何商业用途——包括但不限于出售本软件，或将
+本软件集成到商业产品或服务中——均被严格禁止。**
+
+任何形式的再分发（无论源代码还是二进制形式）都必须完整保留本版权声明与许可
+文本，不得更改。
+
+本软件仅供学习、研究和个人非商业用途使用，禁止任何形式的商业使用。
+
+本软件按「现状」提供，不附带任何明示或默示的保证，包括但不限于对适销性、特定
+用途适用性及不侵权的保证。无论是因合同、侵权或其他事由引起的任何索赔、损害或
+其他责任，作者或版权持有人均不承担责任。

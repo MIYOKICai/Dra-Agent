@@ -155,4 +155,9 @@ React 18 · Vite · Tailwind CSS · @xyflow/react · zustand · Node.js · Expre
 
 ## License
 
-MIT
+本项目采用**非商业使用许可**（详见 [LICENSE](LICENSE)）：
+
+- 允许：学习、研究及个人非商业用途下的使用、复制、修改与分发（再分发须完整保留本许可）；
+- 禁止：任何形式的商业使用，包括出售本软件或将其集成到商业产品 / 服务中。
+
+Copyright (c) 2026 MIYOKIGames
