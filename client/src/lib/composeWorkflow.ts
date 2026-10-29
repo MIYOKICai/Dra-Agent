@@ -43,7 +43,7 @@ export function buildComposerSystem(mode: ComposerMode): string {
     '- input：起点，接收用户输入。config: { "text": "示例输入" }',
     '- file：文件上传起点。config: { "files": [] }（生成后需用户在节点上手动拖入 PDF / Word / TXT / 图片；仅当用户想法明确围绕已有文档 / 图片时才使用，并说明需手动上传）',
     '- llm：文本生成。config: { "systemPrompt": "角色与要求", "userPrompt": "可用 {{上游节点label}} 引用上游输出", "temperature": 0.7 }',
-    '- agent：可调用工具的智能体。config: { "systemPrompt": "…", "userPrompt": "…", "tools": ["webSummary","getCurrentTime","calculator","searchKnowledge"], "maxIterations": 6 }',
+    '- agent：可调用工具的智能体。config: { "systemPrompt": "…", "userPrompt": "…", "tools": ["webSummary","getCurrentTime","calculator","searchKnowledge","readTextFile","listDirectory","searchFiles","getSystemInfo"], "maxIterations": 6 }。可选工具还包括：saveKnowledge / deleteKnowledgeDoc（知识库写删）、writeTextFile / createDirectory / movePath / copyPath / openPath / writeClipboard（写操作）与 deletePath / runCommand（高危）。注意：写与高危工具在工作流中无确认机制、调用会被拒绝，编排时只选只读类工具，写/高危需求请引导用户使用对话智能体',
     '- retrieval：知识库检索。config: { "query": "{{上游label}}", "topK": 3 }',
     '- template：文本模板拼接。config: { "template": "…{{上游label}}…" }',
     '- image：图像生成。config: { "prompt": "{{上游label}}", "size": "1024x1024", "count": 2 }',

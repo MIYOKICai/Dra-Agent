@@ -3,8 +3,8 @@ node_modules/
 
 # 构建产物
 dist/
-build/
 
+# 注意：build/ 目录是自研 C# 引导安装器源码与 NSIS 资源（installer.cs、make-installer.ps1 等），需要提交
 # 桌面版打包（release/app 打包暂存区；最终 exe 输出在项目外 Temp 目录）
 release/
 
@@ -35,5 +35,10 @@ Thumbs.db
 server/data/
 server/sensitive-words.txt
 
-# 参赛文档（本地保留，不随开源发布）
+# 参赛文档与介绍材料（本地保留，不随开源发布）
 作品介绍文档.md
+作品介绍文档.pdf
+dra-agent-intro/
+
+# Trae 分享包缓存
+.trae-html-share-packages/

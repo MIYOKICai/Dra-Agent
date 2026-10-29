@@ -24,6 +24,7 @@ import {
   IconPaperclip,
   IconRefresh,
   IconShare,
+  IconShield,
   IconSparkles,
   IconStop,
   IconTerminal,
@@ -139,7 +140,7 @@ function AgentStepRow({ step }: { step: CreationStep }) {
   );
 }
 
-/** 工具执行确认卡：写 / 高危调用暂停时渲染，勾选授权后继续（全部拒绝则跳过执行） */
+/** 工具执行确认卡：写 / 高危调用暂停时渲染于消息流末尾，勾选授权后继续（全部拒绝则跳过执行） */
 function ToolConfirmCard({
   calls,
   onDecide,
@@ -148,18 +149,40 @@ function ToolConfirmCard({
   onDecide: (confirms: { callId: string; approved: boolean }[]) => void;
 }) {
   const [checked, setChecked] = useState<boolean[]>(() => calls.map(() => true));
+  const selected = checked.filter(Boolean).length;
+  const hasDanger = calls.some((c) => c.risk === 'danger');
   return (
-    <div className="rounded-2xl border border-line bg-panel p-4">
-      <p className="text-sm font-medium text-ink">
-        Agent 请求执行{calls.length > 1 ? `以下 ${calls.length} 项` : '以下'}操作，请确认
-      </p>
-      <div className="mt-3 flex flex-col gap-2">
+    <div className="overflow-hidden rounded-2xl border border-line bg-elevated shadow-sm">
+      {/* 头部：盾形图标 + 标题 + 副说明（含高危时红色强调，写入为琥珀色） */}
+      <div
+        className={`flex items-center gap-2.5 border-b border-line px-4 py-3 ${
+          hasDanger ? 'bg-rose-500/[0.06]' : 'bg-amber-500/[0.06]'
+        }`}
+      >
+        <span
+          className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${
+            hasDanger ? 'bg-rose-500/15 text-rose-500' : 'bg-amber-500/15 text-amber-500'
+          }`}
+        >
+          <IconShield className="h-3.5 w-3.5" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium text-ink">
+            Agent 请求执行{calls.length > 1 ? ` ${calls.length} 项` : ''}操作，需要你的授权
+          </p>
+          <p className="mt-0.5 text-xs text-ink-muted">写入 / 高危操作已暂停，确认后才会真正执行</p>
+        </div>
+      </div>
+      {/* 调用清单：风险徽标 + 工具名 + mono 参数块 */}
+      <div className="flex flex-col gap-2 px-4 py-3">
         {calls.map((c, i) => {
           const risk = c.risk === 'danger' ? 'danger' : 'write';
+          const pill =
+            risk === 'danger' ? 'bg-rose-500/15 text-rose-500' : 'bg-amber-500/15 text-amber-500';
           return (
             <label
               key={c.id}
-              className="flex min-w-0 cursor-pointer items-center gap-2 text-xs text-ink-muted"
+              className="flex cursor-pointer items-start gap-2.5 rounded-lg bg-wash-faint px-2.5 py-2 transition-colors hover:bg-wash"
             >
               <input
                 type="checkbox"
@@ -167,33 +190,48 @@ function ToolConfirmCard({
                 onChange={(e) =>
                   setChecked((prev) => prev.map((v, j) => (j === i ? e.target.checked : v)))
                 }
-                className="h-3.5 w-3.5 shrink-0"
+                className="mt-0.5 h-4 w-4 shrink-0 accent-mono"
               />
-              <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${RISK_DOT[risk]}`} />
-              <span className="shrink-0 font-medium text-ink">{RISK_LABEL[risk]}</span>
-              <span className="shrink-0 font-medium">{c.name}</span>
-              <span className="min-w-0 truncate">{clipText(c.arguments.trim() || '{}', 80)}</span>
+              <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${pill}`}>
+                {RISK_LABEL[risk]}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-xs font-medium text-ink">{c.name}</span>
+                <span
+                  className="mt-0.5 block truncate font-mono text-[11px] leading-relaxed text-ink-muted"
+                  title={c.arguments.trim() || '{}'}
+                >
+                  {clipText(c.arguments.trim() || '{}', 120)}
+                </span>
+              </span>
             </label>
           );
         })}
       </div>
-      <div className="mt-3 flex gap-2">
-        <button
-          type="button"
-          onClick={() =>
-            onDecide(calls.map((c, i) => ({ callId: c.id, approved: checked[i] ?? true })))
-          }
-          className="rounded-full bg-mono px-3.5 py-1.5 text-xs font-medium text-mono-fg transition-opacity hover:opacity-90"
-        >
-          允许已选并继续
-        </button>
-        <button
-          type="button"
-          onClick={() => onDecide(calls.map((c) => ({ callId: c.id, approved: false })))}
-          className="rounded-full border border-line px-3.5 py-1.5 text-xs text-ink-muted transition-colors hover:text-ink"
-        >
-          全部拒绝
-        </button>
+      {/* 底部操作行：已选计数 + 主 / 副按钮（未勾选时禁用继续） */}
+      <div className="flex items-center justify-between border-t border-line px-4 py-3">
+        <span className="text-xs text-ink-muted">
+          已选 {selected} / {calls.length} 项
+        </span>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => onDecide(calls.map((c) => ({ callId: c.id, approved: false })))}
+            className="rounded-full border border-line px-3.5 py-1.5 text-xs text-ink-muted transition-colors hover:text-ink"
+          >
+            全部拒绝
+          </button>
+          <button
+            type="button"
+            disabled={selected === 0}
+            onClick={() =>
+              onDecide(calls.map((c, i) => ({ callId: c.id, approved: checked[i] ?? true })))
+            }
+            className="rounded-full bg-mono px-3.5 py-1.5 text-xs font-medium text-mono-fg transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            允许已选并继续
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -481,6 +519,15 @@ export function CreationPanel() {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages]);
+
+  /** 确认卡出现在消息流末尾：自动滚到底，避免卡片被输入区遮住下半截 */
+  useEffect(() => {
+    if (!confirmState) return;
+    const id = window.setTimeout(() => {
+      scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
+    }, 60);
+    return () => window.clearTimeout(id);
+  }, [confirmState]);
 
   /** 输入框随内容自动增高（上限 160px，超出后内部滚动）；清空草稿后回落 */
   useEffect(() => {
@@ -1107,12 +1154,15 @@ export function CreationPanel() {
                     </div>
                   )
                 )}
-                {/* 写 / 高危工具确认卡：服务端 confirm_required 暂停时渲染于消息流末尾 */}
+                {/* 写 / 高危工具确认卡：服务端 confirm_required 暂停时渲染于消息流末尾；
+                    卡片下方额外留出与输入区的呼吸距离 */}
                 {confirmState && (
-                  <ToolConfirmCard
-                    calls={confirmState.calls}
-                    onDecide={(confirms) => confirmResolverRef.current?.(confirms)}
-                  />
+                  <div className="pb-2">
+                    <ToolConfirmCard
+                      calls={confirmState.calls}
+                      onDecide={(confirms) => confirmResolverRef.current?.(confirms)}
+                    />
+                  </div>
                 )}
               </div>
             </div>

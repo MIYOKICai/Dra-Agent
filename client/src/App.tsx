@@ -6,6 +6,7 @@ import { Landing } from './pages/Landing';
 import { SettingsPage } from './pages/SettingsPage';
 import { TemplatesPage } from './pages/TemplatesPage';
 import { TemplateExpandOverlay } from './components/templates/TemplateExpandOverlay';
+import { TitleBar } from './components/TitleBar';
 import { ConfirmHost } from './components/ui/Modal';
 import { useUiStore } from './store/uiStore';
 
@@ -26,6 +27,8 @@ function App() {
   return (
     <BrowserRouter>
       <ThemeSync />
+      {/* 无边框窗口自绘标题栏（仅 Electron 环境渲染，悬浮右上角） */}
+      <TitleBar />
       <Routes>
         <Route path="/" element={<Landing />} />
         <Route path="/canvas" element={<CanvasPage />} />

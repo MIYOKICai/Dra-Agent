@@ -9,7 +9,7 @@ directories:
   output: C:/Users/MECHREVO/AppData/Local/Temp/dra-release
   buildResources: build
 files:
-  - electron/main.cjs
+  - electron/*.cjs
   - package.json
 extraResources:
   - from: release/app
@@ -34,5 +34,13 @@ nsis:
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: always
   shortcutName: Dra-Agent
+  # 安装向导视觉（build/ 下 BMP 由脚本绘制，与落地页同款黑场 + mono 风格）：
+  # header 150x57 向导内页顶部横幅；sidebar 164x314 欢迎/完成页侧边图
+  installerHeader: build/installer-header.bmp
+  installerSidebar: build/installer-sidebar.bmp
+  # 简体中文优先，缺省英文兜底
+  installerLanguages:
+    - zh_CN
+    - en_US
 portable:
   artifactName: ${productName}-${version}-Portable.${ext}

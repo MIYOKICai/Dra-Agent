@@ -124,13 +124,88 @@ export const AGENT_TOOLS = [
     label: 'searchKnowledge · 知识检索',
     description: '在知识库中检索相关文档片段',
   },
+  {
+    value: 'saveKnowledge',
+    label: 'saveKnowledge · 保存知识',
+    description: '把内容保存为知识库文档（写操作，需用户确认）',
+  },
+  {
+    value: 'deleteKnowledgeDoc',
+    label: 'deleteKnowledgeDoc · 删除知识文档',
+    description: '按名称删除知识库文档（高危，需用户确认）',
+  },
+  {
+    value: 'readTextFile',
+    label: 'readTextFile · 读取文件',
+    description: '读取本地文本文件内容（相对路径以用户主目录为基准）',
+  },
+  {
+    value: 'writeTextFile',
+    label: 'writeTextFile · 写入文件',
+    description: '写入/追加文本到本地文件，自动创建父目录（写操作，需用户确认）',
+  },
+  {
+    value: 'listDirectory',
+    label: 'listDirectory · 列出目录',
+    description: '列出文件夹内容：名称、类型、大小与修改时间',
+  },
+  {
+    value: 'createDirectory',
+    label: 'createDirectory · 创建文件夹',
+    description: '递归创建文件夹（写操作，需用户确认）',
+  },
+  {
+    value: 'deletePath',
+    label: 'deletePath · 删除文件/文件夹',
+    description: '删除文件或整个文件夹，不可恢复（高危，需用户确认）',
+  },
+  {
+    value: 'movePath',
+    label: 'movePath · 移动/重命名',
+    description: '移动或重命名文件/文件夹，拒绝覆盖同名目标（写操作，需用户确认）',
+  },
+  {
+    value: 'copyPath',
+    label: 'copyPath · 复制',
+    description: '复制文件或整个文件夹，拒绝覆盖同名目标（写操作，需用户确认）',
+  },
+  {
+    value: 'searchFiles',
+    label: 'searchFiles · 搜索文件',
+    description: '按通配符（* ?）在目录中递归搜索文件名',
+  },
+  {
+    value: 'runCommand',
+    label: 'runCommand · 执行命令',
+    description: '执行 PowerShell / cmd / sh 命令并返回输出；开窗口命令以可见窗口启动（高危，需用户确认）',
+  },
+  {
+    value: 'openPath',
+    label: 'openPath · 打开文件/网址',
+    description: '用系统默认程序打开文件、文件夹、网页或按应用名启动（如 cmd；写操作，需用户确认）',
+  },
+  {
+    value: 'getSystemInfo',
+    label: 'getSystemInfo · 系统信息',
+    description: '获取操作系统、CPU、内存、目录等环境信息',
+  },
+  {
+    value: 'readClipboard',
+    label: 'readClipboard · 读取剪贴板',
+    description: '读取系统剪贴板中的文本内容',
+  },
+  {
+    value: 'writeClipboard',
+    label: 'writeClipboard · 写入剪贴板',
+    description: '把文本写入系统剪贴板（写操作，需用户确认）',
+  },
 ] as const;
 
 export const AGENT_DEFAULTS: AgentNodeConfig = {
   provider: '',
   model: '',
   systemPrompt:
-    '你是 ReAct 智能体：先用一句话说明思考，再按需调用工具获取外部信息（时间 / 计算 / 网页 / 知识库），依据观察结果继续推理；信息足够后停止调用工具并给出最终回答。严禁编造工具未返回的数据；工具失败时说明原因或改用其他方案。',
+    '你是 ReAct 智能体：先用一句话说明思考，再按需调用工具获取外部信息或执行桌面操作（时间 / 计算 / 网页 / 知识库 / 文件与文件夹 / 命令行），依据观察结果继续推理；信息足够后停止调用工具并给出最终回答。严禁编造工具未返回的数据；工具失败时说明原因或改用其他方案。',
   userPrompt: '',
   tools: [],
   maxIterations: 5,

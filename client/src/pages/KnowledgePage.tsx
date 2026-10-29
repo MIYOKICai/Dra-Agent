@@ -25,6 +25,7 @@ import {
 import { useKBStore } from '../store/kbStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useUiStore } from '../store/uiStore';
+import { safeLocalStorage } from '../store/safeStorage';
 import { ProjectSidebar } from '../components/canvas/ProjectSidebar';
 import { DocEditor } from '../components/kb/DocEditor';
 import { Toast } from '../components/Toast';
@@ -97,7 +98,7 @@ export function KnowledgePage() {
   /** 记住上次选中的知识库（刷新 / 重开浏览器后回到同一个库，避免误看其他库的空会话） */
   const [activeKbId, setActiveKbId] = useState<string | null>(() => {
     try {
-      return localStorage.getItem('dra-agent-active-kb');
+      return safeLocalStorage.getItem('dra-agent-active-kb');
     } catch {
       return null;
     }
@@ -153,7 +154,7 @@ export function KnowledgePage() {
     const id = currentKbId;
     if (!id) return;
     try {
-      localStorage.setItem('dra-agent-active-kb', id);
+      safeLocalStorage.setItem('dra-agent-active-kb', id);
     } catch {
       // 隐私模式：忽略
     }
@@ -291,7 +292,7 @@ export function KnowledgePage() {
         setActiveKbId(null);
         setEditingDocId(null);
         try {
-          localStorage.removeItem('dra-agent-active-kb');
+          safeLocalStorage.removeItem('dra-agent-active-kb');
         } catch {
           // 隐私模式：忽略
         }

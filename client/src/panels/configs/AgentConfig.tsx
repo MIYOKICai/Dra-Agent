@@ -30,7 +30,7 @@ export function AgentConfig({ id, data, expanded, variables }: NodeConfigFormPro
       />
       <MultiCheckboxField
         label="可用工具"
-        description="智能体可调用的工具集合"
+        description="智能体可调用的工具集合；标注「需用户确认」的写/高危工具仅在对话智能体中生效，工作流节点调用会被拒绝"
         value={config.tools}
         options={AGENT_TOOLS.map((tool) => ({
           value: tool.value,

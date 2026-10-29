@@ -102,8 +102,8 @@ function Nav({ scrolled }: { scrolled: boolean }) {
     <header
       className={`fixed z-50 transition-all duration-300 ${
         scrolled
-          ? 'inset-x-4 top-3 mx-auto max-w-6xl rounded-full border border-line bg-glass shadow-lg shadow-black/40 backdrop-blur-lg'
-          : 'inset-x-0 top-0 mx-auto max-w-full border border-transparent bg-base'
+          ? 'inset-x-4 top-3 mx-auto max-w-6xl rounded-full border border-line bg-glass shadow-lg shadow-black/40 backdrop-blur-lg [.has-titlebar_&]:top-[52px]'
+          : 'inset-x-0 top-0 mx-auto max-w-full border border-transparent bg-base [.has-titlebar_&]:top-10'
       }`}
     >
       <div

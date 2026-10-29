@@ -3,7 +3,15 @@
  * - listToolSchemas()：导出 ToolSchema 列表（随 /api/chat 的 tools 参数透传给上游模型）
  * - executeTool(name, argsJson)：统一执行入口；参数解析失败 / 未知工具 / 缺必填参数 /
  *   工具内部异常一律转换为结果对象返回，绝不向路由层抛出异常。
+ * - 工具分三类：基础信息类（1~4）、知识库类（5~6）、桌面系统类（7~19，
+ *   文件 / 文件夹 / 命令行 / 系统信息 / 剪贴板，写与高危操作走对话流用户确认）。
  */
+import { spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { KBSearchResult, ToolExecutionResult, ToolRisk, ToolSchema } from '../../shared/types';
 import { addDocument, createKB, deleteDocument, listKBs, searchKB } from './kb';
 
@@ -439,6 +447,861 @@ const deleteKnowledgeDocTool: ToolDefinition = {
   },
 };
 
+/* ==================================================================
+ * 桌面系统工具集（7~19）：文件 / 文件夹 / 命令行 / 系统信息 / 剪贴板
+ * 约定：
+ * - 相对路径一律以用户主目录（os.homedir()）为基准解析，工具描述中向模型说明
+ * - 删除类操作拒绝盘根、用户主目录及其上级目录、Windows 系统目录等受保护路径
+ * - 命令执行带超时强制终止与输出截断，防止挂死或刷爆上下文
+ * - 风险分级：read=直执行；write/danger 走对话流中的用户确认卡
+ * ================================================================ */
+
+const isWin = process.platform === 'win32';
+
+/** 清理 LLM 传参常见的首尾引号与空白（如 "C:\Users\x" 带引号传入） */
+function cleanPathArg(input: unknown): string {
+  if (typeof input !== 'string') return '';
+  return input.trim().replace(/^["']+|["']+$/g, '').trim();
+}
+
+/** 相对路径以用户主目录为基准解析为绝对路径；兼容 file:// URL 形式 */
+function resolveUserPath(input: string): string {
+  let candidate = input;
+  if (/^file:\/\//i.test(candidate)) {
+    try {
+      candidate = fileURLToPath(candidate);
+    } catch {
+      // 非法 file:// URL：保留原样，后续按普通路径处理并自然报错
+    }
+  }
+  const abs = path.isAbsolute(candidate) ? candidate : path.join(os.homedir(), candidate);
+  return path.normalize(abs);
+}
+
+/** Windows 下路径比较统一小写（文件系统不区分大小写） */
+function normKey(p: string): string {
+  return isWin ? p.toLowerCase() : p;
+}
+
+/** 受保护路径：盘根 / 用户主目录及其上级目录 / Windows 系统与程序目录（禁止删除） */
+function isProtectedPath(p: string): boolean {
+  const norm = path.normalize(p);
+  if (path.parse(norm).root === norm) return true;
+  const key = normKey(norm);
+  const home = path.normalize(os.homedir());
+  if (key === normKey(home)) return true;
+  if (home.startsWith(norm + path.sep)) return true;
+  const systemDirs = [
+    process.env.SystemRoot,
+    process.env.ProgramFiles,
+    process.env['ProgramFiles(x86)'],
+    process.env.ProgramData,
+  ].filter((dir): dir is string => Boolean(dir));
+  return systemDirs.some((dir) => normKey(path.normalize(dir)) === key);
+}
+
+/** 字节数人类可读格式化 */
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  const units = ['KB', 'MB', 'GB', 'TB'];
+  let value = bytes / 1024;
+  let i = 0;
+  while (value >= 1024 && i < units.length - 1) {
+    value /= 1024;
+    i += 1;
+  }
+  return `${value >= 100 ? value.toFixed(0) : value.toFixed(1)} ${units[i]}`;
+}
+
+/** 按字符截断（不拆代理对），超长补省略说明 */
+function clipChars(text: string, max: number): string {
+  const chars = Array.from(text);
+  return chars.length > max ? `${chars.slice(0, max).join('')}…（截断，共 ${chars.length} 字）` : chars.join('');
+}
+
+/* ---- 工具 7：readTextFile ---- */
+
+const READ_MAX_BYTES = 512 * 1024;
+const READ_MAX_CHARS = 8000;
+
+const readTextFileTool: ToolDefinition = {
+  name: 'readTextFile',
+  description:
+    '读取本地文本文件内容（自动识别二进制文件并拒绝；超长内容截断。相对路径以用户主目录为基准）',
+  risk: 'read',
+  parameters: {
+    type: 'object',
+    properties: {
+      path: { type: 'string', description: '文件路径，如 Desktop/notes.txt 或绝对路径 C:/Users/x/a.txt' },
+    },
+    required: ['path'],
+  },
+  async execute(args) {
+    const raw = cleanPathArg(args.path);
+    if (!raw) throw new Error('缺少文件路径：path 必须为非空字符串');
+    const p = resolveUserPath(raw);
+    const stat = await fs.stat(p).catch(() => null);
+    if (!stat) throw new Error(`路径不存在：${p}`);
+    if (stat.isDirectory()) throw new Error(`目标是文件夹，请用 listDirectory 列出：${p}`);
+    const buf = await fs.readFile(p);
+    const sliced = buf.length > READ_MAX_BYTES ? buf.subarray(0, READ_MAX_BYTES) : buf;
+    if (sliced.subarray(0, 4096).includes(0)) {
+      throw new Error(`疑似二进制文件，不支持按文本读取：${p}`);
+    }
+    const text = sliced.toString('utf8');
+    const sizeNote =
+      buf.length > READ_MAX_BYTES
+        ? `（文件 ${formatBytes(buf.length)}，仅读取前 ${formatBytes(READ_MAX_BYTES)}）`
+        : '';
+    const notes = [`文件：${p}`, `大小：${formatBytes(buf.length)}${sizeNote}`, '', '--- 内容 ---'];
+    return [...notes, clipChars(text, READ_MAX_CHARS)].join('\n');
+  },
+};
+
+/* ---- 工具 8：writeTextFile ---- */
+
+const WRITE_MAX_CHARS = 2_000_000;
+
+const writeTextFileTool: ToolDefinition = {
+  name: 'writeTextFile',
+  description:
+    '把文本内容写入本地文件，支持覆盖（overwrite）与追加（append）两种模式；父目录不存在时自动创建（写操作：需用户确认后执行）',
+  risk: 'write',
+  parameters: {
+    type: 'object',
+    properties: {
+      path: { type: 'string', description: '目标文件路径（相对路径以用户主目录为基准）' },
+      content: { type: 'string', description: '要写入的文本内容' },
+      mode: {
+        type: 'string',
+        enum: ['overwrite', 'append'],
+        description: '写入模式：overwrite 覆盖原文件（默认）/ append 追加到文件末尾',
+      },
+    },
+    required: ['path', 'content'],
+  },
+  async execute(args) {
+    const raw = cleanPathArg(args.path);
+    if (!raw) throw new Error('缺少文件路径：path 必须为非空字符串');
+    const content = typeof args.content === 'string' ? args.content : '';
+    if (Array.from(content).length > WRITE_MAX_CHARS) {
+      throw new Error(`写入内容过长（上限 ${WRITE_MAX_CHARS} 字），请分批写入`);
+    }
+    const append = args.mode === 'append';
+    const p = resolveUserPath(raw);
+    await fs.mkdir(path.dirname(p), { recursive: true });
+    if (append) await fs.appendFile(p, content, 'utf8');
+    else await fs.writeFile(p, content, 'utf8');
+    const stat = await fs.stat(p);
+    return `${append ? '已追加写入' : '已写入'}文件：${p}（本次 ${Array.from(content).length} 字，文件现大小 ${formatBytes(stat.size)}）`;
+  },
+};
+
+/* ---- 工具 9：listDirectory ---- */
+
+const LIST_MAX_ENTRIES = 200;
+
+const listDirectoryTool: ToolDefinition = {
+  name: 'listDirectory',
+  description:
+    '列出文件夹内容，返回名称、类型、大小与修改时间（不传 path 时默认列出用户主目录）',
+  risk: 'read',
+  parameters: {
+    type: 'object',
+    properties: {
+      path: { type: 'string', description: '目录路径（可省略，默认用户主目录；相对路径以主目录为基准）' },
+    },
+    required: [],
+  },
+  async execute(args) {
+    const raw = cleanPathArg(args.path);
+    const p = raw ? resolveUserPath(raw) : os.homedir();
+    const stat = await fs.stat(p).catch(() => null);
+    if (!stat) throw new Error(`路径不存在：${p}`);
+    if (!stat.isDirectory()) throw new Error(`目标不是文件夹：${p}`);
+    const dirents = await fs.readdir(p, { withFileTypes: true });
+    const sorted = [...dirents].sort((a, b) =>
+      a.isDirectory() !== b.isDirectory() ? (a.isDirectory() ? -1 : 1) : a.name.localeCompare(b.name)
+    );
+    const shown = sorted.slice(0, LIST_MAX_ENTRIES);
+    const lines = await Promise.all(
+      shown.map(async (entry) => {
+        const full = path.join(p, entry.name);
+        if (entry.isDirectory()) return `[目录] ${entry.name}/`;
+        if (entry.isSymbolicLink()) return `[链接] ${entry.name}`;
+        const s = await fs.stat(full).catch(() => null);
+        const meta = s ? `${formatBytes(s.size)} · ${s.mtime.toLocaleString('zh-CN', { hour12: false })}` : '元数据不可读';
+        return `[文件] ${entry.name}（${meta}）`;
+      })
+    );
+    const omitted = sorted.length - shown.length;
+    const header = `目录：${p}\n共 ${sorted.length} 项${omitted > 0 ? `（仅显示前 ${LIST_MAX_ENTRIES} 项，建议用 searchFiles 缩小范围）` : ''}`;
+    return [header, ...lines].join('\n');
+  },
+};
+
+/* ---- 工具 10：createDirectory ---- */
+
+const createDirectoryTool: ToolDefinition = {
+  name: 'createDirectory',
+  description: '递归创建文件夹（父目录不存在时一并创建；已存在视为成功）（写操作：需用户确认后执行）',
+  risk: 'write',
+  parameters: {
+    type: 'object',
+    properties: {
+      path: { type: 'string', description: '要创建的文件夹路径（相对路径以用户主目录为基准）' },
+    },
+    required: ['path'],
+  },
+  async execute(args) {
+    const raw = cleanPathArg(args.path);
+    if (!raw) throw new Error('缺少目录路径：path 必须为非空字符串');
+    const p = resolveUserPath(raw);
+    if (isProtectedPath(p)) throw new Error(`拒绝在受保护路径下操作：${p}`);
+    await fs.mkdir(p, { recursive: true });
+    return `文件夹已就绪：${p}`;
+  },
+};
+
+/* ---- 工具 11：deletePath ---- */
+
+const deletePathTool: ToolDefinition = {
+  name: 'deletePath',
+  description:
+    '删除本地文件或整个文件夹（文件夹连同全部内容递归删除，不可恢复）。盘根、用户主目录及其上级目录、Windows 系统目录受保护不可删除（高危操作：必须经用户确认后执行）',
+  risk: 'danger',
+  parameters: {
+    type: 'object',
+    properties: {
+      path: { type: 'string', description: '要删除的文件或文件夹路径（相对路径以用户主目录为基准）' },
+    },
+    required: ['path'],
+  },
+  async execute(args) {
+    const raw = cleanPathArg(args.path);
+    if (!raw) throw new Error('缺少路径：path 必须为非空字符串');
+    const p = resolveUserPath(raw);
+    if (isProtectedPath(p)) {
+      throw new Error(`拒绝删除受保护路径：${p}（盘根、用户主目录及其上级目录、系统目录不可删除）`);
+    }
+    const stat = await fs.stat(p).catch(() => null);
+    if (!stat) throw new Error(`路径不存在：${p}`);
+    await fs.rm(p, { recursive: true, force: true });
+    return `已删除${stat.isDirectory() ? '文件夹（含全部内容）' : '文件'}：${p}`;
+  },
+};
+
+/* ---- 工具 12：movePath ---- */
+
+const movePathTool: ToolDefinition = {
+  name: 'movePath',
+  description:
+    '移动或重命名文件/文件夹（目标已存在时拒绝覆盖；跨盘移动自动降级为复制后删除）（写操作：需用户确认后执行）',
+  risk: 'write',
+  parameters: {
+    type: 'object',
+    properties: {
+      source: { type: 'string', description: '源文件/文件夹路径' },
+      destination: { type: 'string', description: '目标路径（不可与现有路径重名）' },
+    },
+    required: ['source', 'destination'],
+  },
+  async execute(args) {
+    const srcRaw = cleanPathArg(args.source);
+    const dstRaw = cleanPathArg(args.destination);
+    if (!srcRaw || !dstRaw) throw new Error('缺少参数：source 与 destination 必须为非空字符串');
+    const src = resolveUserPath(srcRaw);
+    const dst = resolveUserPath(dstRaw);
+    const srcStat = await fs.stat(src).catch(() => null);
+    if (!srcStat) throw new Error(`源路径不存在：${src}`);
+    if (await fs.stat(dst).catch(() => null)) throw new Error(`目标已存在，拒绝覆盖：${dst}`);
+    await fs.mkdir(path.dirname(dst), { recursive: true });
+    try {
+      await fs.rename(src, dst);
+    } catch {
+      // 跨盘 rename 失败（EXDEV 等）：降级为复制后删除
+      await fs.cp(src, dst, { recursive: true });
+      await fs.rm(src, { recursive: true, force: true });
+    }
+    return `已${srcStat.isDirectory() ? '移动文件夹' : '移动文件'}：${src} → ${dst}`;
+  },
+};
+
+/* ---- 工具 13：copyPath ---- */
+
+const copyPathTool: ToolDefinition = {
+  name: 'copyPath',
+  description: '复制文件或整个文件夹（含全部子内容；目标已存在时拒绝覆盖）（写操作：需用户确认后执行）',
+  risk: 'write',
+  parameters: {
+    type: 'object',
+    properties: {
+      source: { type: 'string', description: '源文件/文件夹路径' },
+      destination: { type: 'string', description: '目标路径（不可与现有路径重名）' },
+    },
+    required: ['source', 'destination'],
+  },
+  async execute(args) {
+    const srcRaw = cleanPathArg(args.source);
+    const dstRaw = cleanPathArg(args.destination);
+    if (!srcRaw || !dstRaw) throw new Error('缺少参数：source 与 destination 必须为非空字符串');
+    const src = resolveUserPath(srcRaw);
+    const dst = resolveUserPath(dstRaw);
+    const srcStat = await fs.stat(src).catch(() => null);
+    if (!srcStat) throw new Error(`源路径不存在：${src}`);
+    if (await fs.stat(dst).catch(() => null)) throw new Error(`目标已存在，拒绝覆盖：${dst}`);
+    await fs.mkdir(path.dirname(dst), { recursive: true });
+    await fs.cp(src, dst, { recursive: true, errorOnExist: true, force: false });
+    return `已复制${srcStat.isDirectory() ? '文件夹（含全部内容）' : '文件'}：${src} → ${dst}`;
+  },
+};
+
+/* ---- 工具 14：searchFiles ---- */
+
+const SEARCH_MAX_RESULTS_CAP = 200;
+const SEARCH_SKIP_DIRS = new Set(['node_modules', '.git', '$RECYCLE.BIN', 'System Volume Information']);
+
+/** 通配符（* ?）转大小写不敏感正则，其余字符按字面匹配 */
+function wildcardToRegex(pattern: string): RegExp {
+  const escaped = pattern
+    .trim()
+    .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+    .replace(/\*/g, '.*')
+    .replace(/\?/g, '.');
+  return new RegExp(`^${escaped}$`, 'i');
+}
+
+const searchFilesTool: ToolDefinition = {
+  name: 'searchFiles',
+  description:
+    '在指定目录中按文件名通配符递归搜索文件（支持 * 与 ?；自动跳过 node_modules 与 .git 等目录）',
+  risk: 'read',
+  parameters: {
+    type: 'object',
+    properties: {
+      dir: { type: 'string', description: '搜索起始目录（可省略，默认用户主目录）' },
+      pattern: { type: 'string', description: '文件名匹配模式，如 *.pdf、report??.docx、*日程*' },
+      maxDepth: { type: 'number', description: '递归深度上限（1~8，默认 4）' },
+      maxResults: { type: 'number', description: '返回结果数量上限（1~200，默认 50）' },
+    },
+    required: ['pattern'],
+  },
+  async execute(args) {
+    const pattern = typeof args.pattern === 'string' ? args.pattern.trim() : '';
+    if (!pattern) throw new Error('缺少匹配模式：pattern 必须为非空字符串');
+    const rawDir = cleanPathArg(args.dir);
+    const root = rawDir ? resolveUserPath(rawDir) : os.homedir();
+    const rootStat = await fs.stat(root).catch(() => null);
+    if (!rootStat || !rootStat.isDirectory()) throw new Error(`起始目录不存在或不是文件夹：${root}`);
+    let maxDepth = 4;
+    if (typeof args.maxDepth === 'number' && Number.isFinite(args.maxDepth)) {
+      maxDepth = Math.min(Math.max(Math.round(args.maxDepth), 1), 8);
+    }
+    let maxResults = 50;
+    if (typeof args.maxResults === 'number' && Number.isFinite(args.maxResults)) {
+      maxResults = Math.min(Math.max(Math.round(args.maxResults), 1), SEARCH_MAX_RESULTS_CAP);
+    }
+    const regex = wildcardToRegex(pattern);
+    const results: string[] = [];
+    const queue: { dir: string; depth: number }[] = [{ dir: root, depth: 0 }];
+    while (queue.length > 0 && results.length < maxResults) {
+      const { dir, depth } = queue.shift()!;
+      let dirents;
+      try {
+        dirents = await fs.readdir(dir, { withFileTypes: true });
+      } catch {
+        continue; // 无权限 / 已被删除的子目录：跳过
+      }
+      for (const entry of dirents) {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          if (depth < maxDepth && !SEARCH_SKIP_DIRS.has(entry.name)) {
+            queue.push({ dir: full, depth: depth + 1 });
+          }
+        } else if (regex.test(entry.name)) {
+          results.push(full);
+          if (results.length >= maxResults) break;
+        }
+      }
+    }
+    if (results.length === 0) return `在「${root}」中未找到匹配「${pattern}」的文件`;
+    return [
+      `在「${root}」中找到 ${results.length} 个匹配「${pattern}」的文件：`,
+      ...results.map((r, i) => `${i + 1}. ${r}`),
+    ].join('\n');
+  },
+};
+
+/* ---- 工具 15：runCommand ---- */
+
+const COMMAND_MAX_TIMEOUT_SEC = 300;
+const COMMAND_OUTPUT_MAX_CHARS = 6000;
+/** 子进程输出缓冲上限（超出后停止拼接，继续排空防止管道阻塞） */
+const SHELL_OUTPUT_CAP = 200_000;
+
+interface ShellOutcome {
+  code: number | null;
+  stdout: string;
+  stderr: string;
+  timedOut: boolean;
+}
+
+/**
+ * 执行 shell 命令：Windows 支持 cmd / PowerShell，macOS/Linux 走 /bin/sh。
+ * 超时强制终止；stdout/stderr 各自封顶缓冲；可选通过 stdin 注入文本（剪贴板写入用）。
+ */
+function runShell(
+  command: string,
+  shell: 'auto' | 'cmd' | 'powershell',
+  cwd: string | undefined,
+  timeoutMs: number,
+  stdinText?: string
+): Promise<ShellOutcome> {
+  return new Promise((resolve) => {
+    let exe: string;
+    let args: string[];
+    let spawnOpts: { windowsVerbatimArguments?: boolean } = {};
+    // 中文 Windows 下 PowerShell/cmd 重定向输出默认走 OEM 代码页（GBK），
+    // 统一强制 UTF-8 输出，避免 Node 侧按 UTF-8 解码出现乱码
+    if (shell === 'cmd') {
+      if (!isWin) {
+        resolve({ code: null, stdout: '', stderr: 'cmd 仅在 Windows 上可用', timedOut: false });
+        return;
+      }
+      exe = 'cmd.exe';
+      // cmd.exe 不认 MSVCRT 的 \" 转义，必须原样传参（否则命令里的引号被破坏成反斜杠）
+      args = ['/d', '/s', '/c', `chcp 65001>nul & ${command}`];
+      spawnOpts = { windowsVerbatimArguments: true };
+    } else if (shell === 'powershell') {
+      exe = isWin ? 'powershell.exe' : 'pwsh';
+      args = ['-NoProfile', '-NonInteractive', '-Command', `[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; ${command}`];
+    } else {
+      exe = isWin ? 'powershell.exe' : '/bin/sh';
+      args = isWin
+        ? ['-NoProfile', '-NonInteractive', '-Command', `[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; ${command}`]
+        : ['-c', command];
+    }
+    let child;
+    try {
+      child = spawn(exe, args, { cwd: cwd || undefined, windowsHide: true, ...spawnOpts });
+    } catch (err) {
+      resolve({ code: null, stdout: '', stderr: `命令启动失败：${err instanceof Error ? err.message : String(err)}`, timedOut: false });
+      return;
+    }
+    let stdout = '';
+    let stderr = '';
+    let timedOut = false;
+    let settled = false;
+    child.stdout?.on('data', (chunk: Buffer) => {
+      if (stdout.length < SHELL_OUTPUT_CAP) stdout += chunk.toString();
+    });
+    child.stderr?.on('data', (chunk: Buffer) => {
+      if (stderr.length < SHELL_OUTPUT_CAP) stderr += chunk.toString();
+    });
+    if (typeof stdinText === 'string') {
+      child.stdin?.write(stdinText);
+      child.stdin?.end();
+    }
+    const timer = setTimeout(() => {
+      timedOut = true;
+      try {
+        child.kill();
+      } catch {
+        // 进程可能已退出：忽略
+      }
+    }, timeoutMs);
+    child.on('error', (err) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve({ code: null, stdout, stderr: `${stderr}\n${err.message}`.trim(), timedOut });
+    });
+    child.on('close', (code) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve({ code, stdout, stderr, timedOut });
+    });
+  });
+}
+
+/** 把 ShellOutcome 格式化为面向模型的观察文本 */
+function formatShellOutcome(out: ShellOutcome): string {
+  const lines = [`退出码：${out.code ?? '无（启动失败或被终止）'}`];
+  if (out.timedOut) lines.push('状态：执行超时，已被强制终止');
+  const stdout = clipChars(out.stdout.replace(/\r\n/g, '\n'), COMMAND_OUTPUT_MAX_CHARS);
+  if (stdout.trim()) lines.push('--- 标准输出 ---', stdout);
+  const stderr = clipChars(out.stderr.replace(/\r\n/g, '\n'), 2000);
+  if (stderr.trim()) lines.push('--- 错误输出 ---', stderr);
+  return lines.join('\n');
+}
+
+/**
+ * 以「可见窗口」方式启动目标程序（Windows）。
+ *
+ * 为什么不用 start / Start-Process / WScript.Shell 直接跑（均为实测结论，非理论）：
+ * - 服务端进程树运行在无控制台环境中，start 开出的新控制台继承隐藏显示状态；
+ * - Node 默认参数转义（" → \"）与 cmd 引号规则冲突，start "标题" 程序 被解析成找文件 \标题\；
+ * - detached 投递的 PowerShell 在应用进程树中不执行命令（已用 Start-Process 副作用验证）；
+ * - WScript.Shell.Run 在该上下文中返回成功但子进程凭空消失；
+ * - PS Start-Process（UseShellExecute=false 路径）+ -WindowStyle Normal 依旧不可见；
+ * - 唯一稳定可见：.NET ProcessStartInfo{ UseShellExecute=true, WindowStyle=Normal }
+ *   （ShellExecute 语义，支持应用名 / PATH / App Paths / URL / 文档），
+ *   且须由「非 detached + windowsHide 隐藏」的 PowerShell 执行（与捕获模式同环境，已实测开窗可见，
+ *   窗口在 PS 退出后继续存活）。
+ */
+function shellExecutePs(target: string, argsRaw: string, workDir: string): string {
+  const escaped = (s: string): string => s.replace(/'/g, "''");
+  // 未指定目录时落在用户主目录（而非继承服务进程的安装目录）
+  const dir = workDir || os.homedir();
+  let props = `FileName='${escaped(target)}'; UseShellExecute=$true; WindowStyle='Normal'; WorkingDirectory='${escaped(dir)}'`;
+  if (argsRaw) props += `; Arguments='${escaped(argsRaw)}'`;
+  return `$psi = New-Object System.Diagnostics.ProcessStartInfo -Property @{ ${props} }; [void][System.Diagnostics.Process]::Start($psi)`;
+}
+
+/** 拆分「程序 + 参数」目标：首段（支持引号包裹）为程序，其余原样作为 Arguments */
+function splitTarget(target: string): { program: string; argsRaw: string } {
+  if (target.startsWith('"')) {
+    const end = target.indexOf('"', 1);
+    if (end > 0) return { program: target.slice(1, end), argsRaw: target.slice(end + 1).trim() };
+  }
+  const sp = target.indexOf(' ');
+  if (sp < 0) return { program: target, argsRaw: '' };
+  return { program: target.slice(0, sp), argsRaw: target.slice(sp + 1).trim() };
+}
+
+function launchViaShell(target: string, cwd: string | undefined): void {
+  spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', shellExecutePs(target, '', '')], {
+    cwd: cwd || undefined,
+    windowsHide: true,
+    stdio: 'ignore',
+  }).unref();
+}
+
+/** 剥离 start 的窗口开关（/MIN /MAX /D path 等），返回要启动的程序与参数 */
+function stripStartFlags(rest: string): string {
+  let s = rest;
+  for (;;) {
+    const flag = s.match(/^\/(min|max|b|i|low|normal|realtime|abovenormal|belownormal|separate|shared|wait|elevate|node|affinity)\b\s*/i);
+    if (flag) {
+      s = s.slice(flag[0].length);
+      continue;
+    }
+    const dPath = s.match(/^\/d\s+"[^"]*"\s*/i) ?? s.match(/^\/d\s+\S+\s*/i);
+    if (dPath) {
+      s = s.slice(dPath[0].length);
+      continue;
+    }
+    return s.trim();
+  }
+}
+
+/**
+ * 从 start 命令提取启动目标：`start "标题" 程序 参数` / `start 程序 参数` /
+ * `start "" 程序`。引号内首 token 按语义判断——存在同路径则视为程序（连同后续参数），
+ * 否则视为窗口标题丢弃（标题仅影响窗口命名，不影响启动目标本身）。
+ */
+function extractLaunchTarget(command: string): string {
+  let rest = command
+    .replace(/^\s*cmd(?:\.exe)?\s+\/c\s+/i, '')
+    .replace(/^\s*start\s+/i, '')
+    .trim();
+  rest = stripStartFlags(rest);
+  const quoted = rest.match(/^"([^"]*)"\s*(.*)$/);
+  if (quoted) {
+    const [, inner, tail] = quoted;
+    if (inner === '') rest = tail; // start "" 程序：空标题
+    else if (existsSync(resolveUserPath(inner))) rest = `${inner} ${tail}`.trim(); // 引号内是程序路径
+    else rest = tail || inner; // 引号内是窗口标题
+  }
+  return rest.trim();
+}
+
+/**
+ * 将 Start-Process 命令翻译为 .NET ShellExecute 启动脚本。
+ * Start-Process 底层走 UseShellExecute=false，在无控制台父进程中开不出可见窗口，
+ * 故解析 FilePath / -ArgumentList / -WorkingDirectory 后改走 ShellExecute 路径。
+ */
+function translateStartProcess(command: string): string | null {
+  const m = command.match(/^\s*Start-Process\s+/i);
+  if (!m) return null;
+  const rest = command.slice(m[0].length).trim();
+  const takeValue = (name: string): string | undefined => {
+    const vm = rest.match(new RegExp(`-${name}\\s+"([^"]*)"|-${name}\\s+'([^']*)'|-${name}\\s+(\\S+)`, 'i'));
+    return vm ? (vm[1] ?? vm[2] ?? vm[3]) : undefined;
+  };
+  let filePath = takeValue('FilePath');
+  if (!filePath) {
+    const fm = rest.match(/^"([^"]+)"|^'([^']+)'|^(\S+)/);
+    if (fm) filePath = fm[1] ?? fm[2] ?? fm[3];
+  }
+  if (!filePath) return null;
+  const workDir = takeValue('WorkingDirectory') ?? '';
+  let argsRaw = '';
+  const am = rest.match(/-ArgumentList\s+@?\(?([^)]*)\)?/i);
+  if (am) {
+    const tokens = am[1].match(/'([^']*)'|"([^"]*)"|([^\s,()]+)/g) ?? [];
+    argsRaw = tokens
+      .map((t) => (t.startsWith("'") || t.startsWith('"') ? t.slice(1, -1) : t))
+      .filter((t) => t.length > 0)
+      .map((t) => (/\s/.test(t) ? `"${t}"` : t))
+      .join(' ');
+  }
+  return shellExecutePs(filePath, argsRaw, workDir);
+}
+
+/**
+ * 以「可见窗口」方式执行开窗口型命令（runCommand 的 start / Start-Process 分支）。
+ * 投递方式：非 detached + windowsHide 隐藏 PowerShell（与捕获模式同环境），
+ * 由 .NET ShellExecute 打开目标——可见性机制详见 shellExecutePs 注释的实测结论。
+ */
+function launchVisibleCommand(command: string, cwd: string | undefined): void {
+  if (!isWin) {
+    spawn('/bin/sh', ['-c', command], {
+      cwd: cwd || undefined,
+      detached: true,
+      stdio: 'ignore',
+    }).unref();
+    return;
+  }
+  // start 语法目标形如 `cmd /k "cd /d D:\hello"`：首段是程序，其余必须走 Arguments
+  // （整串塞进 FileName 会被 ShellExecute 当成带空格的路径而静默失败）
+  const { program, argsRaw } = splitTarget(extractLaunchTarget(command));
+  const ps = translateStartProcess(command) ?? shellExecutePs(program, argsRaw, cwd ?? '');
+  spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', ps], {
+    cwd: cwd || undefined,
+    windowsHide: true,
+    stdio: 'ignore',
+  }).unref();
+}
+
+/** 窗口启动型命令：以打开可见窗口为目的（start / Start-Process），不捕获输出 */
+const LAUNCH_INTENT_RE = /^\s*(?:start\s+|cmd(?:\.exe)?\s+\/c\s+start\s+|Start-Process\s+)/i;
+
+function isLaunchIntentCommand(command: string): boolean {
+  return LAUNCH_INTENT_RE.test(command);
+}
+
+const runCommandTool: ToolDefinition = {
+  name: 'runCommand',
+  description:
+    '在用户电脑上执行命令并返回输出（Windows 默认 PowerShell，可指定 cmd；macOS/Linux 用 sh）。支持工作目录与超时；start / Start-Process 等开窗口命令会以独立可见窗口启动且无输出。高危操作：执行前会向用户说明并等待确认',
+  risk: 'danger',
+  parameters: {
+    type: 'object',
+    properties: {
+      command: { type: 'string', description: '要执行的命令，如 Get-ChildItem C:/ 或 node -v' },
+      cwd: { type: 'string', description: '工作目录（可省略；相对路径以用户主目录为基准）' },
+      timeoutSec: { type: 'number', description: '超时秒数（1~300，默认 30；超时强制终止）' },
+      shell: {
+        type: 'string',
+        enum: ['auto', 'cmd', 'powershell'],
+        description: 'shell 选择：auto 平台默认（Windows=PowerShell）/ cmd / powershell',
+      },
+    },
+    required: ['command'],
+  },
+  async execute(args) {
+    const command = typeof args.command === 'string' ? args.command.trim() : '';
+    if (!command) throw new Error('缺少命令：command 必须为非空字符串');
+    let cwd: string | undefined;
+    const rawCwd = cleanPathArg(args.cwd);
+    if (rawCwd) {
+      cwd = resolveUserPath(rawCwd);
+      const cwdStat = await fs.stat(cwd).catch(() => null);
+      if (!cwdStat || !cwdStat.isDirectory()) throw new Error(`工作目录不存在或不是文件夹：${cwd}`);
+    }
+    let timeoutSec = 30;
+    if (typeof args.timeoutSec === 'number' && Number.isFinite(args.timeoutSec)) {
+      timeoutSec = Math.min(Math.max(Math.round(args.timeoutSec), 1), COMMAND_MAX_TIMEOUT_SEC);
+    }
+    const shell = args.shell === 'cmd' || args.shell === 'powershell' ? args.shell : 'auto';
+    // start / Start-Process 类命令以「打开可见窗口」为目的：改走独立可见进程启动，
+    // 否则窗口会继承隐藏控制台的隐藏属性，用户看不到任何窗口
+    if (isLaunchIntentCommand(command)) {
+      launchVisibleCommand(command, cwd);
+      return [
+        `命令：${clipChars(command, 200)}`,
+        '结果：已提交到独立窗口进程执行（该命令会打开新窗口，无输出可捕获）。',
+        '注意：仅表示已启动，无法确认窗口内程序是否成功；如需获取命令输出请改用不带 start 的形式。',
+      ].join('\n');
+    }
+    const out = await runShell(command, shell, cwd, timeoutSec * 1000);
+    return [`命令：${clipChars(command, 200)}`, ...(cwd ? [`工作目录：${cwd}`] : []), formatShellOutcome(out)].join('\n');
+  },
+};
+
+/* ---- 工具 16：openPath ---- */
+
+const openPathTool: ToolDefinition = {
+  name: 'openPath',
+  description:
+    '用系统默认程序打开目标：网页（http/https）、本地文件或文件夹，也可按应用名启动程序（如 cmd / notepad / explorer / calc）。打开终端窗口、应用请用本工具。写操作：需用户确认后执行',
+  risk: 'write',
+  parameters: {
+    type: 'object',
+    properties: {
+      target: {
+        type: 'string',
+        description: '网址（http/https）、本地路径，或应用名（如 cmd、notepad、explorer）',
+      },
+    },
+    required: ['target'],
+  },
+  async execute(args) {
+    const raw = cleanPathArg(args.target);
+    if (!raw) throw new Error('缺少打开目标：target 必须为非空字符串');
+    if (/^https?:\/\//i.test(raw)) {
+      try {
+        if (isWin) launchViaShell(raw, undefined);
+        else {
+          spawn(process.platform === 'darwin' ? 'open' : 'xdg-open', [raw], {
+            detached: true,
+            stdio: 'ignore',
+          }).unref();
+        }
+        return `已请求默认浏览器打开：${raw}`;
+      } catch (err) {
+        throw new Error(`打开网页失败：${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+    const p = resolveUserPath(raw);
+    const stat = await fs.stat(p).catch(() => null);
+    if (!stat) {
+      // 不是 URL 也不是本地路径：按应用名 / 命令名启动（ShellExecute 语义可解析 PATH 与 App Paths）
+      try {
+        if (isWin) launchViaShell(raw, undefined);
+        else {
+          spawn(process.platform === 'darwin' ? 'open' : 'xdg-open', [raw], {
+            detached: true,
+            stdio: 'ignore',
+          }).unref();
+        }
+      } catch (err) {
+        throw new Error(`打开失败：${err instanceof Error ? err.message : String(err)}`);
+      }
+      return `已请求系统打开应用或目标：${raw}`;
+    }
+    try {
+      if (isWin) launchViaShell(p, undefined);
+      else {
+        spawn(process.platform === 'darwin' ? 'open' : 'xdg-open', [p], {
+          detached: true,
+          stdio: 'ignore',
+        }).unref();
+      }
+    } catch (err) {
+      throw new Error(`打开失败：${err instanceof Error ? err.message : String(err)}`);
+    }
+    return `已请求系统打开${stat.isDirectory() ? '文件夹' : '文件'}：${p}`;
+  },
+};
+
+/* ---- 工具 17：getSystemInfo ---- */
+
+const getSystemInfoTool: ToolDefinition = {
+  name: 'getSystemInfo',
+  description: '获取运行环境信息：操作系统、架构、CPU、内存、用户目录、临时目录等',
+  risk: 'read',
+  parameters: {
+    type: 'object',
+    properties: {},
+    required: [],
+  },
+  async execute() {
+    const cpus = os.cpus();
+    return [
+      `操作系统：${os.type()} ${os.release()}（${os.platform()}）`,
+      `架构：${os.arch()}`,
+      `主机名：${os.hostname()}`,
+      `CPU：${cpus[0]?.model ?? '未知'} × ${cpus.length} 核`,
+      `内存：共 ${formatBytes(os.totalmem())}，可用 ${formatBytes(os.freemem())}`,
+      `用户主目录：${os.homedir()}`,
+      `临时目录：${os.tmpdir()}`,
+      `服务端工作目录：${process.cwd()}`,
+      `Node 版本：${process.version}`,
+      `系统运行时长：${Math.round(os.uptime() / 3600)} 小时`,
+    ].join('\n');
+  },
+};
+
+/* ---- 工具 18：readClipboard ---- */
+
+const CLIPBOARD_MAX_CHARS = 4000;
+
+const readClipboardTool: ToolDefinition = {
+  name: 'readClipboard',
+  description: '读取系统剪贴板中的文本内容（仅支持文本；图片等非文本内容返回提示）',
+  risk: 'read',
+  parameters: {
+    type: 'object',
+    properties: {},
+    required: [],
+  },
+  async execute() {
+    let text = '';
+    if (isWin) {
+      const out = await runShell('Get-Clipboard -Raw', 'powershell', undefined, 8000);
+      if (out.code !== 0 && !out.stdout.trim()) {
+        throw new Error(`读取剪贴板失败：${clipChars(out.stderr, 200)}`);
+      }
+      text = out.stdout.replace(/\r?\n$/, '');
+    } else if (process.platform === 'darwin') {
+      const out = await runShell('pbpaste', 'auto', undefined, 8000);
+      text = out.stdout;
+    } else {
+      const out = await runShell('xclip -selection clipboard -o', 'auto', undefined, 8000);
+      text = out.stdout;
+    }
+    if (!text.trim()) return '剪贴板为空或不含可读文本（可能存放的是图片等非文本内容）';
+    return `剪贴板文本（${Array.from(text).length} 字）：\n${clipChars(text, CLIPBOARD_MAX_CHARS)}`;
+  },
+};
+
+/* ---- 工具 19：writeClipboard ---- */
+
+const writeClipboardTool: ToolDefinition = {
+  name: 'writeClipboard',
+  description: '把文本内容写入系统剪贴板（写操作：需用户确认后执行）',
+  risk: 'write',
+  parameters: {
+    type: 'object',
+    properties: {
+      text: { type: 'string', description: '要写入剪贴板的文本' },
+    },
+    required: ['text'],
+  },
+  async execute(args) {
+    const text = typeof args.text === 'string' ? args.text : '';
+    if (!text.trim()) throw new Error('缺少文本内容：text 必须为非空字符串');
+    if (isWin) {
+      // 多行文本经临时文件中转，规避 PowerShell 命令行引号转义问题
+      const tmp = path.join(os.tmpdir(), `dra-clipboard-${Date.now()}.txt`);
+      await fs.writeFile(tmp, text, 'utf8');
+      try {
+        const out = await runShell(
+          `Get-Content -LiteralPath '${tmp}' -Raw -Encoding UTF8 | Set-Clipboard`,
+          'powershell',
+          undefined,
+          8000
+        );
+        if (out.code !== 0) {
+          throw new Error(`写入剪贴板失败：${clipChars(out.stderr, 200)}`);
+        }
+      } finally {
+        await fs.rm(tmp, { force: true });
+      }
+    } else if (process.platform === 'darwin') {
+      const out = await runShell('pbcopy', 'auto', undefined, 8000, text);
+      if (out.code !== 0) throw new Error(`写入剪贴板失败：${clipChars(out.stderr, 200)}`);
+    } else {
+      const out = await runShell('xclip -selection clipboard -i', 'auto', undefined, 8000, text);
+      if (out.code !== 0) throw new Error(`写入剪贴板失败（可能未安装 xclip）：${clipChars(out.stderr, 200)}`);
+    }
+    return `已写入剪贴板（${Array.from(text).length} 字）`;
+  },
+};
+
 /* =============== 注册表与统一执行入口 =============== */
 
 const TOOLS: ToolDefinition[] = [
@@ -448,6 +1311,19 @@ const TOOLS: ToolDefinition[] = [
   searchKnowledgeTool,
   saveKnowledgeTool,
   deleteKnowledgeDocTool,
+  readTextFileTool,
+  writeTextFileTool,
+  listDirectoryTool,
+  createDirectoryTool,
+  deletePathTool,
+  movePathTool,
+  copyPathTool,
+  searchFilesTool,
+  runCommandTool,
+  openPathTool,
+  getSystemInfoTool,
+  readClipboardTool,
+  writeClipboardTool,
 ];
 
 const registry = new Map(TOOLS.map((tool) => [tool.name, tool]));

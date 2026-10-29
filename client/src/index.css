@@ -141,6 +141,16 @@ body,
   height: 100%;
 }
 
+/* ===== 桌面版无边框窗口（html.has-titlebar 由 TitleBar 挂载时写入）=====
+   页面内容整体下移 40px 让出自绘标题栏；全屏高度容器同步扣减，
+   保证底部不溢出视口。浏览器直接打开时无该类，布局与原来完全一致 */
+html.has-titlebar body {
+  padding-top: 40px;
+}
+html.has-titlebar .h-screen {
+  height: calc(100vh - 40px);
+}
+
 body {
   margin: 0;
   background-color: var(--bg-base);
@@ -228,6 +238,17 @@ summary:focus-visible,
 }
 ::-webkit-scrollbar-corner {
   background: transparent;
+}
+
+/* 首页（document 滚动条）隐藏：滚轮 / 触摸 / 拖拽仍可滚动，视觉更沉浸；
+   仅作用于 html 自身，页内滚动区（细滚动条样式）不受影响 */
+html {
+  scrollbar-width: none;
+}
+html::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
 }
 
 /* 隐藏滚动条（画布页与对话流）：保留滚动能力，视觉上无滚动条 */
