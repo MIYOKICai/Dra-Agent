@@ -1,4 +1,4 @@
-﻿﻿# 构建 Dra-Agent 自绘引导安装器（单文件 exe）
+﻿# 构建 Dra-Agent 自绘引导安装器（单文件 exe）
 # 流程：绘制 logo/ico 资源 → win-unpacked 打 zip → csc 编译引导器 → zip+footer 追加到 exe 尾部
 # 产物：release\exe\Dra-Agent-<ver>-Setup.exe（旧 NSIS Setup 备份为 -Setup-NSIS.exe）
 param()
@@ -89,8 +89,9 @@ $licensePath = Join-Path $src 'license.txt'
 if ($LASTEXITCODE -ne 0) { throw "csc 编译失败（exit $LASTEXITCODE）" }
 
 # ---------- 6. 追加 zip + footer → 单文件安装器 ----------
-$final = Join-Path $outDir 'Dra-Agent-0.1.0-Setup.exe'
-$nsisBackup = Join-Path $outDir 'Dra-Agent-0.1.0-Setup-NSIS.exe'
+$ver = (Get-Content (Join-Path $root 'package.json') -Raw -Encoding UTF8 | ConvertFrom-Json).version
+$final = Join-Path $outDir ('Dra-Agent-{0}-Setup.exe' -f $ver)
+$nsisBackup = Join-Path $outDir ('Dra-Agent-{0}-Setup-NSIS.exe' -f $ver)
 if (Test-Path $final) {
     if (-not (Test-Path $nsisBackup)) { Move-Item $final $nsisBackup -Force }
     else { Remove-Item $final -Force }
