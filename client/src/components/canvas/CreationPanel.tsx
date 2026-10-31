@@ -19,6 +19,7 @@ import {
   IconDatabase,
   IconEdit,
   IconFileText,
+  IconFlag,
   IconImage,
   IconLoader,
   IconPaperclip,
@@ -263,9 +264,10 @@ function ActionBtn({
   );
 }
 
-/** 助手消息操作行（参考图一样式）：复制 / 点赞 / 点踩 / 分享 / 朗读 + 用量 tok + 时间 */
+/** 助手消息操作行（参考图一样式）：复制 / 点赞 / 点踩 / 分享 / 举报 / 朗读 + 用量 tok + 时间 */
 function AssistantActions({ message, voiceKey }: { message: CreationMessage; voiceKey: string }) {
   const showToast = useUiStore((s) => s.showToast);
+  const showReport = useUiStore((s) => s.showReport);
   const [copied, setCopied] = useState(false);
   const [feedback, setFeedback] = useState<'up' | 'down' | null>(null);
   /** 全局朗读状态订阅：只有目标键命中的按钮切换为合成中 / 停止态 */
@@ -327,6 +329,19 @@ function AssistantActions({ message, voiceKey }: { message: CreationMessage; voi
       </ActionBtn>
       <ActionBtn onClick={share} label="分享">
         <IconShare className="h-3.5 w-3.5" />
+      </ActionBtn>
+      {/* 举报：定位云端消息 id（本地上云后回填 cloudId；未同步的消息提示稍后再试） */}
+      <ActionBtn
+        onClick={() => {
+          if (!message.cloudId) {
+            showToast('该消息尚未同步到云端，请稍后再试');
+            return;
+          }
+          showReport({ targetType: 'message', targetId: message.cloudId });
+        }}
+        label="举报"
+      >
+        <IconFlag className="h-3.5 w-3.5" />
       </ActionBtn>
       {/* 语音朗读：点按合成并播放（晓晓音色），朗读中变停止；同一时间只朗读一条 */}
       <ActionBtn

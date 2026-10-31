@@ -11,6 +11,7 @@ import { useCanvasStore } from '../../store/canvasStore';
 import { useUiStore } from '../../store/uiStore';
 import { useWorkspaceStore } from '../../store/workspaceStore';
 import { useCreationSessions } from '../../lib/creationSessions';
+import { getCloudCanvasId } from '../../lib/canvasSync';
 import { CanvasThumb } from './CanvasThumb';
 import {
   IconArrowLeft,
@@ -19,6 +20,7 @@ import {
   IconCheck,
   IconChevronDown,
   IconEdit,
+  IconFlag,
   IconLayers,
   IconLayoutBoard,
   IconLoader,
@@ -49,6 +51,7 @@ function RowActionStrip({
   onTrash,
   onCancelDelete,
   onConfirmDelete,
+  onReport,
 }: {
   confirming: boolean;
   onBack: () => void;
@@ -56,6 +59,8 @@ function RowActionStrip({
   onTrash: () => void;
   onCancelDelete: () => void;
   onConfirmDelete: () => void;
+  /** 可选举报入口（仅画布行）：定位云端目标提交举报 */
+  onReport?: () => void;
 }) {
   if (confirming) {
     return (
@@ -102,6 +107,12 @@ function RowActionStrip({
         <IconEdit className="h-3.5 w-3.5" />
         重命名
       </button>
+      {onReport && (
+        <button type="button" title="举报" className={STRIP_BTN} onClick={(e) => { e.stopPropagation(); onReport(); }}>
+          <IconFlag className="h-3.5 w-3.5" />
+          举报
+        </button>
+      )}
       <button type="button" title="删除" className={STRIP_BTN} onClick={(e) => { e.stopPropagation(); onTrash(); }}>
         <IconTrash className="h-3.5 w-3.5" />
         删除
@@ -237,6 +248,7 @@ export function ProjectSidebar() {
   /** 正在流式生成中的会话 id：对应行尾显示环形旋转加载，完成后切回对勾 */
   const generatingSessionId = useUiStore((s) => s.generatingSessionId);
   const showToast = useUiStore((s) => s.showToast);
+  const showReport = useUiStore((s) => s.showReport);
 
   const canvases = useWorkspaceStore((s) => s.canvases);
   const activeId = useWorkspaceStore((s) => s.activeId);
@@ -406,6 +418,16 @@ export function ProjectSidebar() {
   const deleteCanvasRow = (id: string): void => {
     deleteCanvasById(id);
     showToast('已删除画布');
+  };
+
+  /** 举报画布：经映射定位云端 id（未上云提示稍后再试），打开全局举报弹窗 */
+  const reportCanvasRow = (id: string): void => {
+    const cloudId = getCloudCanvasId(id);
+    if (!cloudId) {
+      showToast('该画布尚未同步到云端，请稍后再试');
+      return;
+    }
+    showReport({ targetType: 'canvas', targetId: cloudId });
   };
 
   /** 删除创作对话；删除当前打开的会话时回退到新对话态（/chat 去参数 / 关面板） */
@@ -829,6 +851,10 @@ export function ProjectSidebar() {
                             onConfirmDelete={() => {
                               closeRowUi();
                               deleteCanvasRow(item.id);
+                            }}
+                            onReport={() => {
+                              closeRowUi();
+                              reportCanvasRow(item.id);
                             }}
                           />
                         </div>

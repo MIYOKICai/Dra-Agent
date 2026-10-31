@@ -127,6 +127,13 @@ export class OpenAICompatProvider implements ProviderAdapter {
     return Boolean(this.cfg.apiKey);
   }
 
+  /** 派生一个使用指定 API Key 的同型适配器（浅拷贝配置，不影响共享实例，并发安全）；
+   *  供 getAdapterForUser 按「平台密钥 / 用户自有密钥」注入每请求密钥 */
+  withApiKey(apiKey: string): ProviderAdapter {
+    const Ctor = this.constructor as new (cfg: ProviderConfig) => OpenAICompatProvider;
+    return new Ctor({ ...this.cfg, apiKey });
+  }
+
   listModels(): ModelInfo[] {
     return this.cfg.models;
   }

@@ -23,7 +23,12 @@ export interface ToolDefinition {
   parameters: Record<string, unknown>;
   /** 风险分级：read=只读直执行（缺省）；write=写操作需授权；danger=高危需确认 */
   risk?: ToolRisk;
-  execute(args: Record<string, unknown>): Promise<string>;
+  execute(args: Record<string, unknown>, ctx: ToolContext): Promise<string>;
+}
+
+/** 工具执行上下文：知识库类工具按 userId 隔离数据（未登录时知识库工具拒绝执行） */
+export interface ToolContext {
+  userId?: string;
 }
 
 /* =============== 工具 1：getCurrentTime =============== */
@@ -369,16 +374,17 @@ const searchKnowledgeTool: ToolDefinition = {
     },
     required: ['query'],
   },
-  async execute(args) {
+  async execute(args, ctx) {
     const query = typeof args.query === 'string' ? args.query.trim() : '';
     if (!query) {
       throw new Error('缺少检索词：query 必须为字符串');
     }
+    if (!ctx.userId) throw new Error('需要登录后才能检索知识库');
     let topK = 3;
     if (typeof args.topK === 'number' && Number.isFinite(args.topK)) {
       topK = Math.min(Math.max(Math.round(args.topK), 1), 10);
     }
-    const { fragments }: KBSearchResult = await searchKB(query, topK);
+    const { fragments }: KBSearchResult = await searchKB(ctx.userId, query, topK);
     if (fragments.length === 0) {
       return '知识库中未检索到相关内容';
     }
@@ -402,20 +408,21 @@ const saveKnowledgeTool: ToolDefinition = {
     },
     required: ['title', 'content'],
   },
-  async execute(args) {
+  async execute(args, ctx) {
     const title = typeof args.title === 'string' ? args.title.trim() : '';
     const content = typeof args.content === 'string' ? args.content.trim() : '';
     if (!title) throw new Error('缺少文档标题：title 必须为非空字符串');
     if (!content) throw new Error('缺少文档内容：content 必须为非空字符串');
-    const kbs = await listKBs();
+    if (!ctx.userId) throw new Error('需要登录后才能写入知识库');
+    const kbs = await listKBs(ctx.userId);
     // 目标库：文档数最多者（与 searchKB 的选库规则一致）；无库时自动创建「对话笔记」
     let kb = [...kbs].sort(
       (a, b) => b.docCount - a.docCount || b.createdAt.localeCompare(a.createdAt)
     )[0];
     if (!kb) {
-      kb = await createKB({ name: '对话笔记' });
+      kb = await createKB(ctx.userId, { name: '对话笔记' });
     }
-    await addDocument(kb.id, { name: title, content });
+    await addDocument(ctx.userId, kb.id, { name: title, content });
     return `已保存到知识库「${kb.name}」：文档「${title}」（${Array.from(content).length} 字）`;
   },
 };
@@ -433,13 +440,14 @@ const deleteKnowledgeDocTool: ToolDefinition = {
     },
     required: ['docName'],
   },
-  async execute(args) {
+  async execute(args, ctx) {
     const docName = typeof args.docName === 'string' ? args.docName.trim() : '';
     if (!docName) throw new Error('缺少文档名称：docName 必须为非空字符串');
-    for (const kb of await listKBs()) {
+    if (!ctx.userId) throw new Error('需要登录后才能删除知识库文档');
+    for (const kb of await listKBs(ctx.userId)) {
       const doc = kb.documents.find((d) => d.name === docName);
       if (doc) {
-        await deleteDocument(kb.id, doc.id);
+        await deleteDocument(ctx.userId, kb.id, doc.id);
         return `已从知识库「${kb.name}」删除文档「${docName}」`;
       }
     }
@@ -1352,12 +1360,14 @@ function requiredParams(tool: ToolDefinition): string[] {
 /**
  * 统一执行入口：解析 argsJson → 未知工具 / 风险授权 / 缺必填参数校验 → 执行。
  * 任何失败都以 {ok:false, error} 返回，工具内部异常同样兜底，绝不抛出。
- * 写（write）/ 高危（danger）工具未经 confirmed=true 授权时拒绝执行。
+ * 写（write）/ 高危（danger）工具未经 confirmed=true 授权时拒绝执行；
+ * ctx.userId 供知识库类工具做用户隔离。
  */
 export async function executeTool(
   name: string,
   argsJson: string,
-  confirmed = false
+  confirmed = false,
+  ctx: ToolContext = {}
 ): Promise<ToolExecutionResult> {
   const tool = registry.get(name);
   if (!tool) {
@@ -1395,7 +1405,7 @@ export async function executeTool(
   }
 
   try {
-    const result = await tool.execute(args);
+    const result = await tool.execute(args, ctx);
     return { ok: true, result };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };

@@ -106,7 +106,8 @@ async function buildContext(
   request: ChatRequest,
   adapter: ProviderAdapter,
   onEvent: (e: SSEEvent) => void,
-  signal: AbortSignal
+  signal: AbortSignal,
+  userId: string
 ): Promise<void> {
   const parts: string[] = [];
   const first = messages[0];
@@ -147,12 +148,12 @@ async function buildContext(
     parts.push(['', '[历史对话摘要]', summary, '（更早的对话已压缩为摘要，其后为最近原文）'].join('\n'));
   }
 
-  // ④ 知识库检索：用最后一条用户消息查询
+  // ④ 知识库检索：用最后一条用户消息查询（仅当前用户的知识库）
   const lastUser = [...messages].reverse().find((m) => m.role === 'user');
   if (lastUser && lastUser.content.trim()) {
     try {
       const query = Array.from(lastUser.content.trim()).slice(0, 200).join('');
-      const { fragments } = await searchKB(query, 3);
+      const { fragments } = await searchKB(userId, query, 3);
       if (fragments.length > 0) {
         parts.push(
           [
@@ -180,7 +181,8 @@ async function buildContext(
 async function resumePendingCalls(
   messages: ChatMessage[],
   toolConfirms: { callId: string; approved: boolean }[],
-  onEvent: (e: SSEEvent) => void
+  onEvent: (e: SSEEvent) => void,
+  userId: string
 ): Promise<void> {
   const lastAssistant = [...messages]
     .reverse()
@@ -195,11 +197,11 @@ async function resumePendingCalls(
     let content: string;
     let ok: boolean;
     if (risk === 'read') {
-      const r = await executeTool(call.name, call.arguments);
+      const r = await executeTool(call.name, call.arguments, false, { userId });
       ok = r.ok;
       content = r.ok ? (r.result ?? '') : `工具执行失败：${r.error ?? '未知错误'}`;
     } else if (toolConfirms.find((c) => c.callId === call.id)?.approved === true) {
-      const r = await executeTool(call.name, call.arguments, true);
+      const r = await executeTool(call.name, call.arguments, true, { userId });
       ok = r.ok;
       content = r.ok ? (r.result ?? '') : `工具执行失败：${r.error ?? '未知错误'}`;
     } else {
@@ -235,21 +237,23 @@ async function updateProfile(
  * 运行服务端 Agent：入口（新对话）→ 上下文注入 → ReAct 主循环；
  * 恢复模式（toolConfirms 非空）→ 补齐被确认暂停的调用 → 主循环。
  * 主循环内 delta 实时转发，收敛后由调用方（路由）负责输出检查与 done 事件。
+ * userId：当前登录用户，知识库自动检索与工具执行按其隔离数据。
  */
 export async function runAgent(
   request: ChatRequest,
   adapter: ProviderAdapter,
   onEvent: (event: SSEEvent) => void,
-  signal: AbortSignal
+  signal: AbortSignal,
+  userId: string
 ): Promise<AgentRunResult> {
   // 协议消息拷贝：恢复模式下为客户端原样回传的完整协议数组（含 system / tool 消息）
   const messages: ChatMessage[] = request.messages.map((m) => ({ ...m }));
   const isResume = Array.isArray(request.toolConfirms) && request.toolConfirms.length > 0;
 
   if (isResume) {
-    await resumePendingCalls(messages, request.toolConfirms ?? [], onEvent);
+    await resumePendingCalls(messages, request.toolConfirms ?? [], onEvent, userId);
   } else {
-    await buildContext(messages, request, adapter, onEvent, signal);
+    await buildContext(messages, request, adapter, onEvent, signal, userId);
   }
 
   const tools = listToolSchemas();
@@ -309,8 +313,8 @@ export async function runAgent(
 
     // 全只读：逐个执行（失败重试 1 次）→ 回填观察消息进入下一轮
     for (const call of result.toolCalls) {
-      let r = await executeTool(call.name, call.arguments);
-      if (!r.ok) r = await executeTool(call.name, call.arguments);
+      let r = await executeTool(call.name, call.arguments, false, { userId });
+      if (!r.ok) r = await executeTool(call.name, call.arguments, false, { userId });
       const content = r.ok ? (r.result ?? '') : `工具执行失败：${r.error ?? '未知错误'}`;
       onEvent({ type: 'tool_result', callId: call.id, name: call.name, content, ok: r.ok });
       messages.push({ role: 'tool', tool_call_id: call.id, content });

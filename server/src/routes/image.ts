@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import type { ImageRequest } from '../../../shared/types';
-import { getAdapter } from '../providers';
+import { getAdapterForUser } from '../providers';
 import { checkText } from '../safety';
 
 export const imageRouter = Router();
@@ -29,7 +29,8 @@ imageRouter.post('/', async (req, res) => {
     res.status(400).json({ error: '请求格式错误：需要 provider 与 prompt' });
     return;
   }
-  const adapter = getAdapter(body.provider);
+  // requireAuth 在挂载点统一注入：密钥解析 平台密钥 → 用户自有密钥
+  const adapter = getAdapterForUser(body.provider, req.user?.id ?? '');
   if (!adapter) {
     res.status(404).json({ error: `未知服务商：${body.provider}` });
     return;

@@ -329,7 +329,10 @@ export const useCanvasStore = create<CanvasState>()((set, get) => ({
         set({ nodes: [], edges: [], name: DEFAULT_WORKFLOW_NAME });
       },
 
-      setName: (name) => set({ name }),
+      setName: (name) => {
+        console.log('[SYNC-DBG] canvasStore.setName called:', name);
+        set({ name });
+      },
 
       hydrateCanvas: (nodes, edges, name) => set({ nodes, edges, name }),
 

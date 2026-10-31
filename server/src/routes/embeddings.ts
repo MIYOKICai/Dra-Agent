@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getAdapter } from '../providers';
+import { getAdapterForUser } from '../providers';
 
 export const embeddingsRouter = Router();
 
@@ -21,7 +21,8 @@ embeddingsRouter.post('/', async (req, res) => {
     return;
   }
 
-  const adapter = getAdapter(provider);
+  // requireAuth 在挂载点统一注入：密钥解析 平台密钥 → 用户自有密钥
+  const adapter = getAdapterForUser(provider, req.user?.id ?? '');
   if (!adapter) {
     res.status(404).json({ error: `未知服务商：${provider}` });
     return;

@@ -1,9 +1,10 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express';
 import type { ChatMessage, ChatRequest, SSEEvent } from '../../../shared/types';
-import { getAdapter } from '../providers';
+import { getAdapterForUser } from '../providers';
 import { runAgent } from '../agent';
 import { checkText } from '../safety';
+import { requireAuth } from '../middleware/auth';
 
 export const chatRouter = Router();
 
@@ -30,18 +31,24 @@ function isChatMessages(value: unknown): value is ChatMessage[] {
 }
 
 /**
- * POST /api/chat：SSE 流式对话。
+ * POST /api/chat：SSE 流式对话（需登录：Agent 模式按 req.user.id 检索知识库）。
  * 事件序列：delta... → [tool_calls] → [blocked(输出命中敏感词时)] → done。
  * 输入命中敏感词时不请求上游，直接 blocked + done；
  * 客户端中断（req close）时向上游发送 abort。
  */
-chatRouter.post('/', (req: Request, res: Response) => {
+chatRouter.post('/', requireAuth, (req: Request, res: Response) => {
+  const userId = req.user?.id;
+  if (!userId) {
+    res.status(401).json({ error: '未登录' });
+    return;
+  }
   const body = req.body as Partial<ChatRequest> | undefined;
   if (!body || typeof body.provider !== 'string' || !isChatMessages(body.messages)) {
     res.status(400).json({ error: '请求格式错误：需要 provider 与非空 messages 数组' });
     return;
   }
-  const adapter = getAdapter(body.provider);
+  // 密钥解析：平台密钥（含 .env 基线）→ 用户自有密钥（user_settings，AES 加密存储）
+  const adapter = getAdapterForUser(body.provider, userId);
   if (!adapter) {
     res.status(404).json({ error: `未知服务商：${body.provider}` });
     return;
@@ -120,7 +127,13 @@ chatRouter.post('/', (req: Request, res: Response) => {
             return;
           }
         }
-        const result = await runAgent(request, adapter, (event) => sendEvent(res, event), controller.signal);
+        const result = await runAgent(
+          request,
+          adapter,
+          (event) => sendEvent(res, event),
+          controller.signal,
+          userId
+        );
         // 输出安全检查：done 之前对累积文本检查，命中则补发 blocked 事件
         const outputCheck = await checkText(result.text);
         if (outputCheck.blocked) {

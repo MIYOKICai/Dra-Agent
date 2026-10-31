@@ -17,3 +17,12 @@ export const serverRoot: string = (() => {
     return path.dirname(path.dirname(__filename));
   }
 })();
+
+/**
+ * 服务端持久化数据目录：SQLite 数据库 / 主密钥 / JWT secret 等的根目录。
+ * - 桌面版（Electron）：主进程通过 DRA_DATA_DIR 重定向到 userData/data（安装目录只读）
+ * - 纯 Node 部署：默认 server/data（与其他数据路径基准一致）
+ */
+export const dataDir: string = process.env.DRA_DATA_DIR
+  ? path.resolve(process.env.DRA_DATA_DIR)
+  : path.join(serverRoot, 'data');

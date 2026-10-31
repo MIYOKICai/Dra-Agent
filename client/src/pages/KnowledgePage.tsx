@@ -35,6 +35,7 @@ import {
   IconBook,
   IconCheck,
   IconFileText,
+  IconFlag,
   IconPlus,
   IconRefresh,
   IconSearch,
@@ -93,6 +94,7 @@ export function KnowledgePage() {
   const providers = useSettingsStore((s) => s.providers);
   const refetchModels = useSettingsStore((s) => s.refetch);
   const showToast = useUiStore((s) => s.showToast);
+  const showReport = useUiStore((s) => s.showReport);
   const showConfirm = useUiStore((s) => s.showConfirm);
 
   /** 记住上次选中的知识库（刷新 / 重开浏览器后回到同一个库，避免误看其他库的空会话） */
@@ -568,6 +570,16 @@ export function KnowledgePage() {
                     })}
                   </p>
                 </div>
+                <button
+                  type="button"
+                  title="举报该文档"
+                  aria-label={`举报文档 ${doc.name}`}
+                  disabled={busy}
+                  onClick={() => showReport({ targetType: 'kbdoc', targetId: doc.id })}
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-ink-muted opacity-0 transition-all hover:bg-wash-strong hover:text-ink group-hover:opacity-100"
+                >
+                  <IconFlag className="h-4 w-4" />
+                </button>
                 <button
                   type="button"
                   title="删除该文档"

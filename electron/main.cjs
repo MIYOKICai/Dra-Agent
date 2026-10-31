@@ -318,6 +318,9 @@ async function startProdServer() {
       ELECTRON_RUN_AS_NODE: '1',
       PORT: String(port),
       PORT_FILE: portFile,
+      // SQLite db / master.key / jwt.secret / files 均以 paths.ts 的 dataDir 为根，
+      // 不传则默认落 resources/app/server/data（只读）→ 打包环境注册登录必挂
+      DRA_DATA_DIR: dataDir,
       KB_DATA_DIR: path.join(dataDir, 'kb'),
       FILES_DATA_DIR: path.join(dataDir, 'files'),
       SETTINGS_PATH: path.join(dataDir, 'settings.json'),

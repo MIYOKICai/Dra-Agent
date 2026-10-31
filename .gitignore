@@ -29,6 +29,7 @@ Thumbs.db
 # 调试 / 自动化产物
 .screenshots/
 .tmp-kb/
+.tmp-desktop-test/
 .verify/
 
 # 运行时数据（本地保留：知识库文档、上传文件、用户画像、设置）

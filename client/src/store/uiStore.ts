@@ -8,6 +8,7 @@ import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import { safeLocalStorage } from './safeStorage';
 import type { ComposerMode } from '../lib/composeWorkflow';
+import type { ReportTarget } from '../api/moderation';
 
 export type ThemeMode = 'dark' | 'light';
 
@@ -79,6 +80,10 @@ interface UiState {
   /** 全程锁对应的画布 id：遮罩只盖目标画布，编排中切到其他画布不受影响 */
   composingCanvasId: string | null;
   setComposingBusy: (busy: boolean, canvasId?: string | null) => void;
+  /** 举报弹窗目标（transient）：非空时全局 ReportDialogHost 渲染举报弹窗 */
+  reportTarget: ReportTarget | null;
+  showReport: (target: ReportTarget) => void;
+  closeReport: () => void;
 }
 
 let toastSeq = 0;
@@ -130,6 +135,9 @@ export const useUiStore = create<UiState>()(
       composingCanvasId: null,
       setComposingBusy: (busy, canvasId) =>
         set({ composingBusy: busy, composingCanvasId: busy ? (canvasId ?? null) : null }),
+      reportTarget: null,
+      showReport: (target) => set({ reportTarget: target }),
+      closeReport: () => set({ reportTarget: null }),
     }),
     {
       name: 'agent-ui-v1',

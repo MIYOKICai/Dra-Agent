@@ -1,5 +1,7 @@
 /**
  * 网关 API 客户端：封装 client ↔ server 网关的全部接口。
+ * - 全部业务请求经 authedFetch 发出：自动注入 Bearer token，401 静默刷新并
+ *   重放一次，403 封禁写入 authStore 并广播（见下方鉴权请求层）
  * - streamChat：fetch + ReadableStream 手动解析 SSE（server 每个事件一行 `data: {json}`）
  * - 其余接口为普通 JSON 请求；HTTP / 网络错误尽量转为可读的 Error 或 error 事件
  */
@@ -17,6 +19,89 @@ import type {
   ToolSchema,
 } from '@shared/types';
 import { API_BASE, parseSSELine } from './client';
+import { AuthError, refreshTokens } from './auth';
+import { AUTH_BANNED_EVENT, AUTH_EXPIRED_EVENT, useAuthStore } from '../store/authStore';
+
+/* =============== 鉴权请求层（authedFetch） =============== */
+
+/** 并发 401 共享的单次刷新 Promise（防止多个请求同时触发 refresh 轮换） */
+let refreshInFlight: Promise<boolean> | null = null;
+
+/** 会话失效兜底：清空本地认证并广播登出事件（幂等，guest 态不重复广播） */
+function handleAuthExpired(): void {
+  const store = useAuthStore.getState();
+  if (store.status === 'guest') return;
+  store.clear();
+  window.dispatchEvent(new CustomEvent(AUTH_EXPIRED_EVENT));
+}
+
+/** 用 refreshToken 静默换取新令牌对；并发调用共享同一次刷新。
+ *  刷新被 403 封禁拒绝时进入 banned 态，其余失败清会话并广播登出 */
+async function tryRefresh(): Promise<boolean> {
+  const { refreshToken } = useAuthStore.getState();
+  if (!refreshToken) return false;
+  if (!refreshInFlight) {
+    refreshInFlight = (async () => {
+      try {
+        const data = await refreshTokens(refreshToken);
+        useAuthStore.getState().setAuth(data.user, data.accessToken, data.refreshToken);
+        return true;
+      } catch (err) {
+        const ban = err instanceof AuthError ? err.banInfo : null;
+        if (ban) {
+          useAuthStore.getState().setBanned(ban);
+          window.dispatchEvent(new CustomEvent(AUTH_BANNED_EVENT));
+        } else {
+          handleAuthExpired();
+        }
+        return false;
+      } finally {
+        refreshInFlight = null;
+      }
+    })();
+  }
+  return refreshInFlight;
+}
+
+/** 403 封禁响应：body 含 banReason 字段时写入 authStore 并广播（其余 403 不处理） */
+async function handleBanned(res: Response): Promise<void> {
+  try {
+    const json = (await res.clone().json()) as { banReason?: unknown; bannedUntil?: unknown } | null;
+    if (!json || !('banReason' in json)) return;
+    useAuthStore.getState().setBanned({
+      reason: typeof json.banReason === 'string' ? json.banReason : null,
+      until: typeof json.bannedUntil === 'string' ? json.bannedUntil : null,
+    });
+    window.dispatchEvent(new CustomEvent(AUTH_BANNED_EVENT));
+  } catch {
+    // 响应体不是 JSON，按普通 403 交给调用方错误路径
+  }
+}
+
+/**
+ * 带鉴权的 fetch：自动注入 Bearer access token；
+ * - 401：用 refreshToken 静默刷新并重放原请求（一次性）；刷新失败清会话并广播
+ *   AUTH_EXPIRED_EVENT，调用方拿到的仍是原始 401 响应，走既有 readError 提示；
+ * - 403：响应体含 banReason 时记录封禁信息并广播 AUTH_BANNED_EVENT。
+ * 所有业务请求（含 streamChat 的 fetch+ReadableStream SSE 流）统一经由此层发出。
+ */
+export async function authedFetch(url: string, init: RequestInit = {}): Promise<Response> {
+  const token = useAuthStore.getState().accessToken;
+  const headers = new Headers(init.headers);
+  if (token) headers.set('Authorization', `Bearer ${token}`);
+  let res = await fetch(url, { ...init, headers });
+  if (res.status === 401) {
+    if (await tryRefresh()) {
+      const retryHeaders = new Headers(init.headers);
+      retryHeaders.set('Authorization', `Bearer ${useAuthStore.getState().accessToken ?? ''}`);
+      res = await fetch(url, { ...init, headers: retryHeaders });
+    } else {
+      handleAuthExpired();
+    }
+  }
+  if (res.status === 403) await handleBanned(res);
+  return res;
+}
 
 /* =============== 模型设置页（/api/settings） =============== */
 
@@ -46,14 +131,14 @@ export interface ProviderPatch {
 }
 
 export async function fetchProviderSettings(signal?: AbortSignal): Promise<ProviderSettingsItem[]> {
-  const res = await fetch(`${API_BASE}/settings`, { signal });
+  const res = await authedFetch(`${API_BASE}/settings`, { signal });
   if (!res.ok) throw new Error(await readError(res, '读取模型设置失败'));
   const data = (await res.json()) as { providers: ProviderSettingsItem[] };
   return data.providers;
 }
 
 export async function updateProvider(id: string, patch: ProviderPatch): Promise<ProviderSettingsItem> {
-  const res = await fetch(`${API_BASE}/settings/providers/${encodeURIComponent(id)}`, {
+  const res = await authedFetch(`${API_BASE}/settings/providers/${encodeURIComponent(id)}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(patch),
@@ -69,7 +154,7 @@ export async function createProvider(body: {
   apiKey?: string;
   models?: ModelInfo[];
 }): Promise<ProviderSettingsItem> {
-  const res = await fetch(`${API_BASE}/settings/providers`, {
+  const res = await authedFetch(`${API_BASE}/settings/providers`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -80,7 +165,7 @@ export async function createProvider(body: {
 }
 
 export async function deleteProvider(id: string): Promise<void> {
-  const res = await fetch(`${API_BASE}/settings/providers/${encodeURIComponent(id)}`, {
+  const res = await authedFetch(`${API_BASE}/settings/providers/${encodeURIComponent(id)}`, {
     method: 'DELETE',
   });
   if (!res.ok) throw new Error(await readError(res, '删除服务商失败'));
@@ -96,7 +181,7 @@ function isAbort(err: unknown): boolean {
 }
 
 /** 从非 2xx 响应体中提取可读错误信息（server 约定 { error } 或 { blocked, hits }） */
-async function readError(res: Response, fallback: string): Promise<string> {
+export async function readError(res: Response, fallback: string): Promise<string> {
   try {
     const json = (await res.json()) as { error?: unknown; blocked?: unknown; hits?: unknown };
     if (typeof json.error === 'string' && json.error) return json.error;
@@ -111,7 +196,7 @@ async function readError(res: Response, fallback: string): Promise<string> {
 
 /** GET /api/models：服务商与模型清单（含可用性） */
 export async function fetchModels(signal?: AbortSignal): Promise<ModelsResponse> {
-  const res = await fetch(`${API_BASE}/models`, { signal });
+  const res = await authedFetch(`${API_BASE}/models`, { signal });
   if (!res.ok) {
     throw new Error(`获取模型列表失败（HTTP ${res.status}）`);
   }
@@ -143,7 +228,7 @@ export async function streamChat(
 
   let res: Response;
   try {
-    res = await fetch(`${API_BASE}/chat`, {
+    res = await authedFetch(`${API_BASE}/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(req),
@@ -194,7 +279,7 @@ export async function generateImage(
   req: ImageRequest,
   signal?: AbortSignal
 ): Promise<string[]> {
-  const res = await fetch(`${API_BASE}/image`, {
+  const res = await authedFetch(`${API_BASE}/image`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(req),
@@ -222,7 +307,7 @@ export async function testProvider(
   signal?: AbortSignal
 ): Promise<TestProviderResult> {
   try {
-    const res = await fetch(`${API_BASE}/test/${encodeURIComponent(providerId)}`, {
+    const res = await authedFetch(`${API_BASE}/test/${encodeURIComponent(providerId)}`, {
       method: 'POST',
       signal,
     });
@@ -247,7 +332,7 @@ export interface EmbeddingsOptions {
 
 /** GET /api/tools：服务端内置工具注册表（ToolSchema 列表） */
 export async function listTools(signal?: AbortSignal): Promise<ToolSchema[]> {
-  const res = await fetch(`${API_BASE}/tools`, { signal });
+  const res = await authedFetch(`${API_BASE}/tools`, { signal });
   if (!res.ok) {
     throw new Error(`获取工具列表失败（HTTP ${res.status}）`);
   }
@@ -273,7 +358,7 @@ export async function executeTool(
   confirmed?: boolean
 ): Promise<ToolExecutionResult> {
   try {
-    const res = await fetch(`${API_BASE}/tools/execute`, {
+    const res = await authedFetch(`${API_BASE}/tools/execute`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, arguments: args, ...(confirmed ? { confirmed: true } : {}) }),
@@ -295,7 +380,7 @@ export async function fetchEmbeddings(
   inputs: string[],
   options: EmbeddingsOptions
 ): Promise<number[][]> {
-  const res = await fetch(`${API_BASE}/embeddings`, {
+  const res = await authedFetch(`${API_BASE}/embeddings`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ provider: options.provider, model: options.model, input: inputs }),
@@ -317,7 +402,7 @@ export async function fetchEmbeddings(
 
 /** GET /api/kb：知识库列表（含模式徽标与文档列表） */
 export async function listKBs(signal?: AbortSignal): Promise<KBInfoEx[]> {
-  const res = await fetch(`${API_BASE}/kb`, { signal });
+  const res = await authedFetch(`${API_BASE}/kb`, { signal });
   if (!res.ok) {
     throw new Error(await readError(res, '获取知识库列表失败'));
   }
@@ -338,7 +423,7 @@ export interface CreateKBInput {
 
 /** POST /api/kb：新建知识库 */
 export async function createKB(input: CreateKBInput, signal?: AbortSignal): Promise<KBInfoEx> {
-  const res = await fetch(`${API_BASE}/kb`, {
+  const res = await authedFetch(`${API_BASE}/kb`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
@@ -352,7 +437,7 @@ export async function createKB(input: CreateKBInput, signal?: AbortSignal): Prom
 
 /** DELETE /api/kb/:id：删除知识库（连同全部文档与索引） */
 export async function deleteKB(kbId: string, signal?: AbortSignal): Promise<void> {
-  const res = await fetch(`${API_BASE}/kb/${encodeURIComponent(kbId)}`, {
+  const res = await authedFetch(`${API_BASE}/kb/${encodeURIComponent(kbId)}`, {
     method: 'DELETE',
     signal,
   });
@@ -367,7 +452,7 @@ export async function addDocument(
   doc: { name: string; content: string },
   signal?: AbortSignal
 ): Promise<KBInfoEx> {
-  const res = await fetch(`${API_BASE}/kb/${encodeURIComponent(kbId)}/documents`, {
+  const res = await authedFetch(`${API_BASE}/kb/${encodeURIComponent(kbId)}/documents`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(doc),
@@ -387,7 +472,7 @@ export async function addDocumentFile(
   signal?: AbortSignal
 ): Promise<KBInfoEx> {
   const body = await file.arrayBuffer();
-  const res = await fetch(
+  const res = await authedFetch(
     `${API_BASE}/kb/${encodeURIComponent(kbId)}/documents/file?name=${encodeURIComponent(file.name)}`,
     {
       method: 'POST',
@@ -409,7 +494,7 @@ export async function createDocument(
   name: string,
   signal?: AbortSignal
 ): Promise<KBDocDetail> {
-  const res = await fetch(`${API_BASE}/kb/${encodeURIComponent(kbId)}/documents`, {
+  const res = await authedFetch(`${API_BASE}/kb/${encodeURIComponent(kbId)}/documents`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ name }),
@@ -427,7 +512,7 @@ export async function deleteDocument(
   docId: string,
   signal?: AbortSignal
 ): Promise<KBInfoEx> {
-  const res = await fetch(
+  const res = await authedFetch(
     `${API_BASE}/kb/${encodeURIComponent(kbId)}/documents/${encodeURIComponent(docId)}`,
     { method: 'DELETE', signal }
   );
@@ -448,7 +533,7 @@ export interface KBDocDetail {
 
 /** GET /api/kb/:id/documents/:docId：文档详情（含原文） */
 export async function getDocument(kbId: string, docId: string, signal?: AbortSignal): Promise<KBDocDetail> {
-  const res = await fetch(
+  const res = await authedFetch(
     `${API_BASE}/kb/${encodeURIComponent(kbId)}/documents/${encodeURIComponent(docId)}`,
     { signal }
   );
@@ -465,7 +550,7 @@ export async function updateDocument(
   patch: { name?: string; content?: string },
   signal?: AbortSignal
 ): Promise<KBInfoEx> {
-  const res = await fetch(
+  const res = await authedFetch(
     `${API_BASE}/kb/${encodeURIComponent(kbId)}/documents/${encodeURIComponent(docId)}`,
     {
       method: 'PUT',
@@ -482,7 +567,7 @@ export async function updateDocument(
 
 /** GET /api/kb/:id/qa：读取该库问答记录（服务端持久化，刷新 / 换浏览器不丢） */
 export async function fetchKBQA(kbId: string, signal?: AbortSignal): Promise<KBQAMessage[]> {
-  const res = await fetch(`${API_BASE}/kb/${encodeURIComponent(kbId)}/qa`, { signal });
+  const res = await authedFetch(`${API_BASE}/kb/${encodeURIComponent(kbId)}/qa`, { signal });
   if (!res.ok) {
     throw new Error(await readError(res, '读取问答记录失败'));
   }
@@ -496,7 +581,7 @@ export async function saveKBQA(
   messages: KBQAMessage[],
   signal?: AbortSignal
 ): Promise<void> {
-  const res = await fetch(`${API_BASE}/kb/${encodeURIComponent(kbId)}/qa`, {
+  const res = await authedFetch(`${API_BASE}/kb/${encodeURIComponent(kbId)}/qa`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ messages }),
@@ -514,7 +599,7 @@ export async function searchKB(
   topK: number,
   signal?: AbortSignal
 ): Promise<KBSearchResult> {
-  const res = await fetch(`${API_BASE}/kb/${encodeURIComponent(kbId)}/search`, {
+  const res = await authedFetch(`${API_BASE}/kb/${encodeURIComponent(kbId)}/search`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ query, topK }),
@@ -532,7 +617,7 @@ export async function searchKB(
 
 /** POST /api/kb/:id/rebuild：用当前可用的 embedding 服务商重建向量 */
 export async function rebuildKB(kbId: string, signal?: AbortSignal): Promise<KBInfoEx> {
-  const res = await fetch(`${API_BASE}/kb/${encodeURIComponent(kbId)}/rebuild`, {
+  const res = await authedFetch(`${API_BASE}/kb/${encodeURIComponent(kbId)}/rebuild`, {
     method: 'POST',
     signal,
   });
@@ -554,7 +639,7 @@ export async function uploadNodeFile(
   signal?: AbortSignal
 ): Promise<FileMeta> {
   const body = await file.arrayBuffer();
-  const res = await fetch(
+  const res = await authedFetch(
     `${API_BASE}/files?name=${encodeURIComponent(file.name)}&id=${encodeURIComponent(id)}`,
     { method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body, signal }
   );
@@ -568,7 +653,7 @@ export async function uploadNodeFile(
 
 /** GET /api/files/:id/text：读取文档类文件的提取文本（运行时文件节点输出） */
 export async function fetchNodeFileText(id: string, signal?: AbortSignal): Promise<string> {
-  const res = await fetch(`${API_BASE}/files/${encodeURIComponent(id)}/text`, { signal });
+  const res = await authedFetch(`${API_BASE}/files/${encodeURIComponent(id)}/text`, { signal });
   if (!res.ok) {
     throw new Error(await readError(res, '读取文件文本失败'));
   }
@@ -578,7 +663,7 @@ export async function fetchNodeFileText(id: string, signal?: AbortSignal): Promi
 
 /** GET /api/files/:id/raw：拉取原始字节（图片运行时转 dataURL） */
 export async function fetchNodeFileRaw(id: string, signal?: AbortSignal): Promise<Blob> {
-  const res = await fetch(`${API_BASE}/files/${encodeURIComponent(id)}/raw`, { signal });
+  const res = await authedFetch(`${API_BASE}/files/${encodeURIComponent(id)}/raw`, { signal });
   if (!res.ok) {
     throw new Error(await readError(res, '读取文件内容失败'));
   }
@@ -588,7 +673,7 @@ export async function fetchNodeFileRaw(id: string, signal?: AbortSignal): Promis
 /** DELETE /api/files/:id：删除服务端文件（节点内移除文件时调用，失败静默） */
 export async function deleteNodeFile(id: string): Promise<void> {
   try {
-    await fetch(`${API_BASE}/files/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    await authedFetch(`${API_BASE}/files/${encodeURIComponent(id)}`, { method: 'DELETE' });
   } catch {
     // 删除失败不阻塞 UI（孤儿文件由服务端按目录清理）
   }

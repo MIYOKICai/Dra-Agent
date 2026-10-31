@@ -1,13 +1,14 @@
 /**
- * 知识库路由：/api/kb/*。
- * 错误约定：KBError 按 status 转 HTTP；参数非法 400；库/文档不存在 404；
+ * 知识库路由：/api/kb/*（全部端点挂 requireAuth，数据按 req.user.id 隔离）。
+ * 错误约定：KBError 按 status 转 HTTP；参数非法 400；库/文档不存在 404（跨用户访问同样 404，不泄露存在性）；
  * 敏感词命中 400 + { blocked, hits }；统一 JSON { error }。
  */
 import { Router } from 'express';
-import express, { type Response } from 'express';
+import express, { type Request, type Response } from 'express';
 import type { KBQAMessage, KBSearchResult } from '../../../shared/types';
 import { checkText } from '../safety';
 import { ExtractError, extractText } from '../extract';
+import { requireAuth } from '../middleware/auth';
 import {
   KBError,
   addDocument,
@@ -26,6 +27,16 @@ import {
 
 export const kbRouter = Router();
 
+/** 全部端点需登录：认证通过后 req.user = { id, email, role } */
+kbRouter.use(requireAuth);
+
+/** 当前登录用户 id（requireAuth 已注入；兜底抛 401 便于类型收窄） */
+function uid(req: Request): string {
+  const id = req.user?.id;
+  if (!id) throw new KBError('未登录', 401);
+  return id;
+}
+
 /** 文档纯文本内容上限（客户端负责读文件转文本） */
 const MAX_DOC_BYTES = 2 * 1024 * 1024;
 
@@ -43,14 +54,19 @@ function handleError(res: Response, err: unknown): void {
   res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
 }
 
-/** GET /api/kb：知识库列表（含模式徽标与文档列表） */
-kbRouter.get('/', async (_req, res) => {
+/** GET /api/kb：当前用户的知识库列表（含模式徽标与文档列表） */
+async function handleList(req: Request, res: Response): Promise<void> {
   try {
-    res.json({ kbs: await listKBs() });
+    res.json({ kbs: await listKBs(uid(req)) });
   } catch (err) {
     handleError(res, err);
   }
-});
+}
+
+kbRouter.get('/', handleList);
+
+/** GET /api/kb/list：GET / 的语义化别名（同样只返回当前用户的知识库） */
+kbRouter.get('/list', handleList);
 
 /** POST /api/kb：新建知识库 { name, chunkSize?, chunkOverlap? } → KBInfoEx */
 kbRouter.post('/', async (req, res) => {
@@ -62,7 +78,7 @@ kbRouter.post('/', async (req, res) => {
       res.status(400).json({ error: '请求格式错误：需要 name（字符串）' });
       return;
     }
-    const kb = await createKB({
+    const kb = await createKB(uid(req), {
       name: body.name,
       chunkSize: typeof body.chunkSize === 'number' ? body.chunkSize : undefined,
       chunkOverlap: typeof body.chunkOverlap === 'number' ? body.chunkOverlap : undefined,
@@ -73,10 +89,10 @@ kbRouter.post('/', async (req, res) => {
   }
 });
 
-/** DELETE /api/kb/:id：删除知识库 → { ok: true } */
+/** DELETE /api/kb/:id：删除整个知识库（级联全部文档 / 索引 / 实体 / kb_docs 记录）→ { ok: true } */
 kbRouter.delete('/:id', async (req, res) => {
   try {
-    await deleteKB(req.params.id);
+    await deleteKB(uid(req), req.params.id);
     res.json({ ok: true });
   } catch (err) {
     handleError(res, err);
@@ -94,21 +110,23 @@ kbRouter.post('/:id/documents', async (req, res) => {
     }
     // 无 content 字段：新建空白文档（不走向量化，编辑保存时再由 PUT 重分块）
     if (typeof body.content !== 'string') {
-      res.json(await createDocument(req.params.id, body.name));
+      res.json(await createDocument(uid(req), req.params.id, body.name));
       return;
     }
     if (Buffer.byteLength(body.content, 'utf8') > MAX_DOC_BYTES) {
       res.status(400).json({ error: '文档内容超过 2MB 限制' });
       return;
     }
-    res.json(await addDocument(req.params.id, { name: body.name, content: body.content }));
+    res.json(
+      await addDocument(uid(req), req.params.id, { name: body.name, content: body.content })
+    );
   } catch (err) {
     handleError(res, err);
   }
 });
 
 /** POST /api/kb/:id/documents/file?name=<文件名>：上传原始文件（.txt/.md/.docx/.pdf），
- *  服务端提取文本后入库（重分块 + 向量化）→ KBInfoEx */
+ *  服务端提取文本后入库；原始字节作为文档实体落盘到该用户知识库目录 → KBInfoEx */
 kbRouter.post('/:id/documents/file', fileUpload, async (req, res) => {
   try {
     const name = typeof req.query.name === 'string' ? req.query.name : '';
@@ -129,7 +147,13 @@ kbRouter.post('/:id/documents/file', fileUpload, async (req, res) => {
       res.status(400).json({ error: '提取出的文本超过 2MB 限制' });
       return;
     }
-    res.json(await addDocument(req.params.id, { name: name.replace(/\.[^.]+$/, '') || name, content: text }));
+    res.json(
+      await addDocument(uid(req), req.params.id, {
+        name: name.replace(/\.[^.]+$/, '') || name,
+        content: text,
+        entity: { data: req.body, filename: name },
+      })
+    );
   } catch (err) {
     if (err instanceof ExtractError) {
       res.status(400).json({ error: err.message });
@@ -139,10 +163,10 @@ kbRouter.post('/:id/documents/file', fileUpload, async (req, res) => {
   }
 });
 
-/** DELETE /api/kb/:id/documents/:docId：删除文档 → KBInfoEx */
+/** DELETE /api/kb/:id/documents/:docId：删除文档（级联 kb_docs 记录 / 实体文件 / 切片）→ KBInfoEx */
 kbRouter.delete('/:id/documents/:docId', async (req, res) => {
   try {
-    res.json(await deleteDocument(req.params.id, req.params.docId));
+    res.json(await deleteDocument(uid(req), req.params.id, req.params.docId));
   } catch (err) {
     handleError(res, err);
   }
@@ -151,7 +175,7 @@ kbRouter.delete('/:id/documents/:docId', async (req, res) => {
 /** GET /api/kb/:id/documents/:docId：文档详情（含原文，编辑器读取）→ KBDocDetail */
 kbRouter.get('/:id/documents/:docId', async (req, res) => {
   try {
-    res.json(await getDocument(req.params.id, req.params.docId));
+    res.json(await getDocument(uid(req), req.params.id, req.params.docId));
   } catch (err) {
     handleError(res, err);
   }
@@ -174,7 +198,7 @@ kbRouter.put('/:id/documents/:docId', async (req, res) => {
       return;
     }
     res.json(
-      await updateDocument(req.params.id, req.params.docId, {
+      await updateDocument(uid(req), req.params.id, req.params.docId, {
         name: typeof body?.name === 'string' ? body.name : undefined,
         content: typeof body?.content === 'string' ? body.content : undefined,
       })
@@ -184,7 +208,8 @@ kbRouter.put('/:id/documents/:docId', async (req, res) => {
   }
 });
 
-/** POST /api/kb/:id/search：检索 { query, topK? } → KBSearchResult；query 命中敏感词 400 blocked */
+/** POST /api/kb/:id/search：在当前用户的该库内检索 { query, topK? } → KBSearchResult；
+ *  query 命中敏感词 400 blocked */
 kbRouter.post('/:id/search', async (req, res) => {
   try {
     const body = req.body as { query?: unknown; topK?: unknown } | undefined;
@@ -202,7 +227,7 @@ kbRouter.post('/:id/search', async (req, res) => {
       return;
     }
     const topK = typeof body.topK === 'number' ? body.topK : 3;
-    const result: KBSearchResult = await search(req.params.id, body.query, topK);
+    const result: KBSearchResult = await search(uid(req), req.params.id, body.query, topK);
     res.json(result);
   } catch (err) {
     handleError(res, err);
@@ -222,7 +247,7 @@ function isQAMessage(m: unknown): m is KBQAMessage {
 /** GET /api/kb/:id/qa：读取该库问答记录 → { messages }（服务端持久化，刷新不丢） */
 kbRouter.get('/:id/qa', async (req, res) => {
   try {
-    res.json({ messages: await getQA(req.params.id) });
+    res.json({ messages: await getQA(uid(req), req.params.id) });
   } catch (err) {
     handleError(res, err);
   }
@@ -236,7 +261,7 @@ kbRouter.put('/:id/qa', async (req, res) => {
       res.status(400).json({ error: '请求格式错误：需要 messages 数组' });
       return;
     }
-    res.json(await setQA(req.params.id, body.messages.filter(isQAMessage)));
+    res.json(await setQA(uid(req), req.params.id, body.messages.filter(isQAMessage)));
   } catch (err) {
     handleError(res, err);
   }
@@ -245,7 +270,7 @@ kbRouter.put('/:id/qa', async (req, res) => {
 /** POST /api/kb/:id/rebuild：重建向量 → KBInfoEx */
 kbRouter.post('/:id/rebuild', async (req, res) => {
   try {
-    res.json(await rebuildKB(req.params.id));
+    res.json(await rebuildKB(uid(req), req.params.id));
   } catch (err) {
     handleError(res, err);
   }
